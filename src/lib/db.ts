@@ -1,0 +1,147 @@
+import { openDB, DBSchema, IDBPDatabase } from 'idb';
+
+export interface Exercise {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  secondaryMuscles?: string[];
+  isCustom?: boolean;
+}
+
+export interface SetLog {
+  weight: number;
+  reps: number;
+  rpe?: number;
+  completed: boolean;
+  timestamp: number;
+}
+
+export interface ExerciseLog {
+  exerciseId: string;
+  exerciseName: string;
+  restTimer: number; // copied from plan
+  sets: SetLog[];
+  notes?: string;
+}
+
+export interface WorkoutSession {
+  id: string;
+  workoutPlanId: string;
+  workoutPlanName: string;
+  date: number;
+  duration?: number; // in seconds
+  exercises: ExerciseLog[];
+  totalVolume: number;
+  isCompleted: boolean;
+}
+
+export interface WorkoutPlanExercise {
+  exerciseId: string;
+  targetSets: number;
+  targetReps: string; // e.g., "8-12"
+  notes?: string;
+  restTimer: number; // in seconds
+}
+
+export interface WorkoutPlan {
+  id: string;
+  name: string;
+  exercises: WorkoutPlanExercise[];
+  order: number;
+}
+
+export interface UserStats {
+  id: string;
+  bodyWeightRecords: { date: number; weight: number }[];
+  streak: number;
+  lastWorkoutDate?: number;
+}
+
+interface IronLogDB extends DBSchema {
+  exercises: {
+    key: string;
+    value: Exercise;
+    indexes: { 'by-muscle': string };
+  };
+  plans: {
+    key: string;
+    value: WorkoutPlan;
+    indexes: { 'by-order': number };
+  };
+  sessions: {
+    key: string;
+    value: WorkoutSession;
+    indexes: { 'by-date': number; 'by-plan': string };
+  };
+  settings: {
+    key: string;
+    value: any;
+  };
+}
+
+let dbPromise: Promise<IDBPDatabase<IronLogDB>>;
+
+export const initDB = () => {
+  if (!dbPromise) {
+    dbPromise = openDB<IronLogDB>('ironlog-db', 2, {
+      upgrade(db, oldVersion, newVersion) {
+        if (oldVersion < 1) {
+          db.createObjectStore('exercises', { keyPath: 'id' }).createIndex('by-muscle', 'muscleGroup');
+          db.createObjectStore('plans', { keyPath: 'id' }).createIndex('by-order', 'order');
+          db.createObjectStore('sessions', { keyPath: 'id' }).createIndex('by-date', 'date');
+          db.createObjectStore('settings', { keyPath: 'id' });
+        }
+      },
+    });
+  }
+  return dbPromise;
+};
+
+export const DEFAULT_EXERCISES: Exercise[] = [
+  // Peito
+  { id: 'p1', name: 'Supino Reto com Barra', muscleGroup: 'Peito' },
+  { id: 'p2', name: 'Supino Inclinado com Halteres', muscleGroup: 'Peito' },
+  { id: 'p3', name: 'Crucifixo Máquina', muscleGroup: 'Peito' },
+  { id: 'p4', name: 'Crossover Polia Alta', muscleGroup: 'Peito' },
+  { id: 'p5', name: 'Flexão de Braços', muscleGroup: 'Peito' },
+  // Costas
+  { id: 'c1', name: 'Puxada Pulley Aberta', muscleGroup: 'Costas' },
+  { id: 'c2', name: 'Remada Curvada com Barra', muscleGroup: 'Costas' },
+  { id: 'c3', name: 'Remada Baixa Triângulo', muscleGroup: 'Costas' },
+  { id: 'c4', name: 'Puxada Unilateral Halter (Serrote)', muscleGroup: 'Costas' },
+  { id: 'c5', name: 'Levantamento Terra', muscleGroup: 'Costas' },
+  // Pernas
+  { id: 'l1', name: 'Agachamento Livre com Barra', muscleGroup: 'Pernas' },
+  { id: 'l2', name: 'Leg Press 45°', muscleGroup: 'Pernas' },
+  { id: 'l3', name: 'Cadeira Extensora', muscleGroup: 'Pernas' },
+  { id: 'l4', name: 'Mesa Flexora', muscleGroup: 'Pernas' },
+  { id: 'l5', name: 'Afundo com Halteres', muscleGroup: 'Pernas' },
+  { id: 'l6', name: 'Elevação de Panturrilha em Pé', muscleGroup: 'Pernas' },
+  // Ombros
+  { id: 'o1', name: 'Desenvolvimento com Halteres', muscleGroup: 'Ombros' },
+  { id: 'o2', name: 'Elevação Lateral', muscleGroup: 'Ombros' },
+  { id: 'o3', name: 'Elevação Frontal', muscleGroup: 'Ombros' },
+  { id: 'o4', name: 'Crucifixo Inverso', muscleGroup: 'Ombros' },
+  // Braços
+  { id: 'b1', name: 'Rosca Direta com Barra W', muscleGroup: 'Braços' },
+  { id: 'b2', name: 'Rosca Martelo', muscleGroup: 'Braços' },
+  { id: 'b3', name: 'Tríceps Corda', muscleGroup: 'Braços' },
+  { id: 'b4', name: 'Tríceps Testa com Barra', muscleGroup: 'Braços' },
+  { id: 'b5', name: 'Mergulho em Bancos', muscleGroup: 'Braços' },
+  // Core
+  { id: 'a1', name: 'Abdominal Supra', muscleGroup: 'Core' },
+  { id: 'a2', name: 'Prancha Isométrica', muscleGroup: 'Core' },
+  { id: 'a3', name: 'Elevação de Pernas', muscleGroup: 'Core' },
+];
+
+export async function seedDatabase() {
+  const db = await initDB();
+  const tx = db.transaction('exercises', 'readwrite');
+  const count = await tx.store.count();
+  if (count === 0) {
+    for (const ex of DEFAULT_EXERCISES) {
+      await tx.store.put(ex);
+    }
+  }
+  await tx.done;
+}

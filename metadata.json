@@ -1,0 +1,6 @@
+{
+  "name": "IronLog",
+  "description": "Aplicativo de rastreamento de treinos mobile-first com foco em progressão de carga e privacidade local.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

@@ -1,0 +1,56 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", sans-serif;
+
+  --color-brand-primary: #FF5E1A;
+  --color-brand-secondary: #39FF14;
+  --color-bg-base: #0D0D0D;
+  --color-bg-card: #1A1A1A;
+  --color-muted: #8E8E93;
+  --color-success: #39FF14;
+}
+
+@layer base {
+  body {
+    @apply bg-bg-base text-white font-sans selection:bg-brand-primary/30;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1, h2, h3, .font-display {
+    @apply font-display tracking-tight uppercase font-extrabold;
+  }
+
+  h1 { @apply text-brand-primary; }
+}
+
+/* Custom Safe Area Handling */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Custom Scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-bg-base;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-800 rounded-full;
+}
+
+/* Hide horizontal scroll */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
