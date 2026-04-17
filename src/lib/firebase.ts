@@ -149,6 +149,39 @@ export async function logWeight(uid: string, weight: number) {
   });
 }
 
+export async function deleteSession(uid: string, sessionId: string, volume: number, date: number) {
+  const sessionRef = doc(db, 'users', uid, 'sessions', sessionId);
+  await deleteDoc(sessionRef);
+  
+  const userRef = doc(db, 'users', uid);
+  const snap = await getDoc(userRef);
+  const data = snap.data();
+
+  const sessionDate = new Date(date);
+  const weekId = format(sessionDate, 'yyyy-ww');
+  const monthId = format(sessionDate, 'yyyy-MM');
+  const yearId = format(sessionDate, 'yyyy');
+
+  const updates: any = {
+    totalVolume: increment(-volume),
+    totalWorkouts: increment(-1)
+  };
+
+  if (data?.weekly?.id === weekId) {
+    updates['weekly.volume'] = increment(-volume);
+    updates['weekly.workouts'] = increment(-1);
+  }
+  if (data?.monthly?.id === monthId) {
+    updates['monthly.volume'] = increment(-volume);
+    updates['monthly.workouts'] = increment(-1);
+  }
+  if (data?.yearly?.id === yearId) {
+    updates['yearly.volume'] = increment(-volume);
+    updates['yearly.workouts'] = increment(-1);
+  }
+
+  await updateDoc(userRef, updates);
+}
 // Data Methods
 export async function saveToCloud(collectionName: string, data: any) {
   const ref = getDocRef(collectionName, data.id || 'default');

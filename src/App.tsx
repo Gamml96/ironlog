@@ -23,6 +23,7 @@ import {
   ChevronLeft,
   Flame,
   X,
+  Check,
   AlertTriangle,
   Activity
 } from 'lucide-react';
@@ -65,7 +66,8 @@ import {
   doc,
   updateUserDisplayName,
   where,
-  logWeight
+  logWeight,
+  deleteSession
 } from './lib/firebase';
 
 // --- Components ---
@@ -127,6 +129,16 @@ export default function App() {
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [migrating, setMigrating] = useState(false);
+
+  const handleDeleteSession = async (sessionId: string, volume: number, date: number) => {
+    if (!window.confirm('Excluir este treino? A tonelagem total será subtraída do seu perfil.')) return;
+    try {
+      await deleteSession(user!.uid, sessionId, volume, date);
+      setRefreshKey(k => k + 1);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   useEffect(() => {
     seedDatabase().then(() => setDbReady(true));
@@ -217,7 +229,16 @@ export default function App() {
     <div className="flex flex-col h-screen max-w-md mx-auto relative overflow-hidden bg-bg-base">
       <main className="flex-1 overflow-y-auto pb-32 pt-safe px-4">
         <AnimatePresence mode="wait">
-          {activeTab === 'hoje' && <HojeView key={refreshKey} onStartWorkout={(w) => setActiveWorkout(w)} onSetActiveTab={setActiveTab} user={user} />}
+          {activeTab === 'hoje' && (
+            <HojeView 
+              key={refreshKey} 
+              onStartWorkout={(w) => setActiveWorkout(w)} 
+              onEditSession={(s) => setActiveWorkout(s)}
+              onDeleteSession={handleDeleteSession}
+              onSetActiveTab={setActiveTab} 
+              user={user} 
+            />
+          )}
           {activeTab === 'treinos' && <TreinosView />}
           {activeTab === 'progresso' && <ProgressoView />}
           {activeTab === 'exercicios' && <ExerciciosView />}
@@ -334,7 +355,14 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
 // --- View: Hoje (Main Dashboard) ---
 
-function HojeView({ onStartWorkout, onSetActiveTab, user }: { onStartWorkout: (w: WorkoutSession) => void, onSetActiveTab: (v: any) => void, user: FirebaseUser, key?: React.Key }) {
+function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveTab, user }: { 
+  onStartWorkout: (w: WorkoutSession) => void, 
+  onEditSession: (s: WorkoutSession) => void,
+  onDeleteSession: (id: string, vol: number, date: number) => void,
+  onSetActiveTab: (v: any) => void, 
+  user: FirebaseUser, 
+  key?: React.Key 
+}) {
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
   const [recentSessions, setRecentSessions] = useState<WorkoutSession[]>([]);
   const [streak, setStreak] = useState(0);
@@ -571,10 +599,21 @@ function HojeView({ onStartWorkout, onSetActiveTab, user }: { onStartWorkout: (w
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-lg">Atividade Recente</h2>
+        <div className="flex justify-between items-center">
+          <h2 className="text-lg italic">Atividade Recente</h2>
+          <Button variant="ghost" size="sm" className="text-[10px] uppercase font-bold text-brand-primary" onClick={() => onSetActiveTab('stats')}>Ver Todos</Button>
+        </div>
         {recentSessions.length > 0 ? (
           recentSessions.map(session => (
-            <Card key={session.id} className="flex items-center gap-4">
+            <Card key={session.id} className="flex items-center gap-4 group relative overflow-hidden">
+               <div 
+                 className="absolute inset-0 bg-brand-primary/10 flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm z-10 cursor-default"
+                 onClick={(e) => e.stopPropagation()}
+               >
+                  <Button variant="secondary" size="sm" className="gap-2 h-10 px-4" onClick={() => onEditSession(session)}><Edit2 size={16} /> Editar</Button>
+                  <Button variant="destructive" size="sm" className="gap-2 h-10 px-4" onClick={() => onDeleteSession(session.id, session.totalVolume, session.date)}><Trash2 size={16} /> Excluir</Button>
+               </div>
+
                <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-brand-primary">
                  <History size={24} />
                </div>
@@ -583,7 +622,7 @@ function HojeView({ onStartWorkout, onSetActiveTab, user }: { onStartWorkout: (w
                      <h4 className="font-bold text-sm">{session.workoutPlanName}</h4>
                      <span className="text-[10px] text-gray-500 uppercase">{isToday(session.date) ? 'Hoje' : isYesterday(session.date) ? 'Ontem' : format(session.date, 'dd/MM')}</span>
                   </div>
-                  <p className="text-xs text-gray-500">Volume: {session.totalVolume}kg • {session.exercises.length} ex.</p>
+                  <p className="text-xs text-gray-500 font-mono">Volume: {session.totalVolume}kg • {session.exercises.length} ex.</p>
                </div>
             </Card>
           ))
@@ -945,11 +984,12 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
 // --- Active Workout Overlay (Session) ---
 
 function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSession, onClose: () => void, onSave: (w: WorkoutSession) => void }) {
+  const isEditing = !!session.isCompleted;
   const [currentSession, setCurrentSession] = useState<WorkoutSession>(JSON.parse(JSON.stringify(session)));
   const [previousData, setPreviousData] = useState<Record<string, ExerciseLog | null>>({});
   const [exerciseDetails, setExerciseDetails] = useState<Record<string, Exercise>>({});
-  const [startTime] = useState(Date.now());
-  const [elapsed, setElapsed] = useState(0);
+  const [startTime] = useState(isEditing ? (session.date || Date.now()) : Date.now());
+  const [elapsed, setElapsed] = useState(isEditing ? (session.duration || 0) : 0);
   const [restTime, setRestTime] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false);
@@ -983,9 +1023,10 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
   }, [currentSession.id]);
 
   useEffect(() => {
+    if (isEditing) return;
     const itv = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
     return () => clearInterval(itv);
-  }, [startTime]);
+  }, [startTime, isEditing]);
 
   useEffect(() => {
     if (restTime > 0) {
@@ -1036,14 +1077,16 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
     }, 0);
     
     // Sync to Cloud
-    updateUserStats(auth.currentUser?.uid || '', totalVol);
+    if (!isEditing) {
+      updateUserStats(auth.currentUser?.uid || '', totalVol);
+    }
 
     onSave({
       ...currentSession,
       totalVolume: totalVol,
       duration: elapsed,
       isCompleted: true,
-      date: Date.now()
+      date: isEditing ? currentSession.date : Date.now()
     });
   };
 
@@ -1453,7 +1496,7 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
              onClick={() => setCategory('workouts')}
              className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${category === 'workouts' ? 'bg-brand-primary text-black' : 'text-gray-500 hover:text-white'}`}
            >
-             Frequência
+             Strikes
            </button>
         </div>
 
@@ -1551,16 +1594,10 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
 function StatsView() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
-  const [weightHistory, setWeightHistory] = useState<any[]>([]);
-  const [newWeight, setNewWeight] = useState('');
 
   useEffect(() => {
     const unsubSessions = onSnapshot(query(getCollectionRef('sessions'), orderBy('date')), (snap) => {
       setSessions(snap.docs.map(d => d.data() as WorkoutSession));
-    });
-
-    const unsubWeight = onSnapshot(query(getCollectionRef('weight_history'), orderBy('date')), (snap) => {
-      setWeightHistory(snap.docs.map(d => d.data()));
     });
 
     async function loadExercises() {
@@ -1570,22 +1607,8 @@ function StatsView() {
     }
     
     loadExercises();
-    return () => {
-      unsubSessions();
-      unsubWeight();
-    };
+    return () => unsubSessions();
   }, []);
-
-  const handleLogWeight = async () => {
-    const w = parseFloat(newWeight);
-    if (isNaN(w) || w <= 0 || !auth.currentUser) return;
-    try {
-      await logWeight(auth.currentUser.uid, w);
-      setNewWeight('');
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   const dataLines = sessions.map(s => ({
     date: format(s.date, 'dd/MM'),
@@ -1658,39 +1681,6 @@ function StatsView() {
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-full text-muted italic">Aguardando dados...</div>
-            )}
-         </Card>
-      </section>
-
-      <section className="space-y-3">
-         <div className="flex items-center justify-between">
-            <h2 className="text-lg italic">Evolução de Peso</h2>
-            <div className="flex gap-2">
-               <input 
-                 type="number" 
-                 placeholder="0.0" 
-                 value={newWeight} 
-                 onChange={(e) => setNewWeight(e.target.value)}
-                 className="w-16 bg-white/5 border border-white/10 rounded-lg px-2 text-sm text-center focus:border-brand-primary outline-none"
-               />
-               <Button variant="secondary" size="icon" className="h-8 w-8" onClick={handleLogWeight}><Plus size={16}/></Button>
-            </div>
-         </div>
-         <Card className="h-64 pt-6 text-[10px]">
-            {weightHistory.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={weightHistory.map(w => ({ date: format(w.date, 'dd/MM'), peso: w.weight })).slice(-15)}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                   <XAxis dataKey="date" stroke="#4a4a4a" tick={{ fill: '#8E8E93' }} />
-                   <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
-                   <Tooltip 
-                     contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                   />
-                   <Line type="monotone" dataKey="peso" stroke="#00FF00" strokeWidth={3} dot={{ fill: '#00FF00', r: 4 }} />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted italic">Registre seu peso para ver o gráfico.</div>
             )}
          </Card>
       </section>
@@ -1868,6 +1858,29 @@ function ExerciciosView() {
 // --- View: Progresso (More Detailed Charts) ---
 
 function ProgressoView() {
+   const [weightHistory, setWeightHistory] = useState<any[]>([]);
+   const [newWeight, setNewWeight] = useState('');
+   const [isLogging, setIsLogging] = useState(false);
+
+   useEffect(() => {
+      const unsubWeight = onSnapshot(query(getCollectionRef('weight_history'), orderBy('date')), (snap) => {
+         setWeightHistory(snap.docs.map(d => d.data()));
+      });
+      return () => unsubWeight();
+   }, []);
+
+   const handleLogWeight = async () => {
+      const w = parseFloat(newWeight);
+      if (isNaN(w) || w <= 0 || !auth.currentUser) return;
+      try {
+         await logWeight(auth.currentUser.uid, w);
+         setNewWeight('');
+         setIsLogging(false);
+      } catch (err) {
+         console.error(err);
+      }
+   };
+
    return (
       <motion.div 
         initial={{ opacity: 0, x: -20 }}
@@ -1882,48 +1895,62 @@ function ProgressoView() {
          <section className="space-y-4">
             <div className="flex items-center gap-2 text-white/50 mb-2">
                <Trophy size={20} className="text-yellow-500" />
-               <h2 className="text-lg italic uppercase">Recordes Recentes</h2>
+               <h2 className="text-lg italic uppercase">Recordes Pessoais</h2>
             </div>
-            <div className="space-y-3">
-               {[
-                  { name: 'Supino Reto', val: '80kg', date: 'Há 2 dias', diff: '+2.5kg' },
-                  { name: 'Agachamento Livre', val: '120kg', date: 'Hoje', diff: '+5kg' },
-                  { name: 'Desenvolvimento', val: '24kg', date: 'Há 5 dias', diff: '+2kg' }
-               ].map((record, i) => (
-                  <Card key={i} className="flex p-0 overflow-hidden">
-                     <div className="w-1.5 bg-brand-primary" />
-                     <div className="p-4 flex-1 flex items-center justify-between">
-                        <div>
-                           <p className="text-xs text-gray-500 uppercase font-black">{record.date}</p>
-                           <h4 className="font-display italic text-lg">{record.name}</h4>
-                        </div>
-                        <div className="text-right">
-                           <p className="text-2xl font-display tracking-tight text-brand-primary leading-none">{record.val}</p>
-                           <p className="text-[10px] text-brand-secondary font-bold uppercase">{record.diff}</p>
-                        </div>
-                     </div>
-                  </Card>
-               ))}
-            </div>
+            <p className="text-xs text-muted italic px-2">Em breve: Acompanhamento de PRs por exercício.</p>
          </section>
 
          <section className="space-y-4">
-            <div className="flex items-center justify-between">
-               <h2 className="text-lg italic uppercase">Peso Corporal</h2>
-               <Button variant="secondary" size="sm">Registrar</Button>
+            <div className="flex justify-between items-center mb-2">
+               <div className="flex items-center gap-2 text-white/50">
+                  <Activity size={20} className="text-brand-primary" />
+                  <h2 className="text-lg italic uppercase">Peso Corporal</h2>
+               </div>
+               
+               <div className="flex gap-2">
+                  {isLogging ? (
+                     <div className="flex gap-2 items-center bg-white/5 p-1 rounded-xl border border-white/10">
+                        <input 
+                           type="number" 
+                           placeholder="75.5" 
+                           value={newWeight}
+                           onChange={(e) => setNewWeight(e.target.value)}
+                           className="w-16 bg-transparent text-sm text-center outline-none text-brand-primary font-bold"
+                           autoFocus
+                        />
+                        <button onClick={handleLogWeight} className="bg-brand-primary text-black p-1.5 rounded-lg active:scale-95 transition-all"><Check size={14} /></button>
+                        <button onClick={() => setIsLogging(false)} className="text-gray-500 p-1.5"><X size={14} /></button>
+                     </div>
+                  ) : (
+                     <Button variant="secondary" size="sm" onClick={() => setIsLogging(true)}>+ Registrar</Button>
+                  )}
+               </div>
             </div>
-            <Card className="h-48 text-[10px] pt-4">
-               <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={[
-                     { d: '01/04', w: 82.5 }, { d: '08/04', w: 82.1 }, { d: '15/04', w: 81.8 }, { d: '22/04', w: 81.5 }
-                  ]}>
-                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                     <XAxis dataKey="d" stroke="#4a4a4a" />
-                     <YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#4a4a4a" />
-                     <Tooltip contentStyle={{ backgroundColor: '#1A1A1A', border: 'none', borderRadius: '12px' }} />
-                     <Line type="monotone" dataKey="w" stroke="#FF5E1A" strokeWidth={3} dot={{ fill: '#FF5E1A', r: 4 }} />
-                  </LineChart>
-               </ResponsiveContainer>
+
+            <Card className="h-64 text-[10px] pt-6 relative overflow-hidden">
+               <div className="absolute top-4 left-4 flex gap-4 text-[10px] text-muted font-bold uppercase tracking-widest z-10">
+                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-brand-primary" /> Peso (kg)</div>
+               </div>
+               {weightHistory.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                     <LineChart data={weightHistory.map(w => ({ d: format(w.date, 'dd/MM'), w: w.weight })).slice(-15)}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="d" stroke="#4a4a4a" tick={{ fill: '#8E8E93' }} />
+                        <YAxis domain={['dataMin - 2', 'dataMax + 2']} stroke="#4a4a4a" tick={{ fill: '#8E8E93' }} />
+                        <Tooltip 
+                           contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                           labelStyle={{ color: '#8E8E93' }}
+                           itemStyle={{ color: '#FF5E1A' }}
+                        />
+                        <Line type="monotone" dataKey="w" stroke="#FF5E1A" strokeWidth={4} dot={{ fill: '#FF5E1A', r: 4, strokeWidth: 0 }} activeDot={{ r: 6, stroke: '#1A1A1A', strokeWidth: 2 }} />
+                     </LineChart>
+                  </ResponsiveContainer>
+               ) : (
+                  <div className="flex flex-col items-center justify-center h-full text-muted space-y-4">
+                     <p className="italic">Nenhum registro de peso encontrado.</p>
+                     <p className="text-[10px] uppercase font-bold text-gray-700">Comece registrando seu peso hoje!</p>
+                  </div>
+               )}
             </Card>
          </section>
       </motion.div>
