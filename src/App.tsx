@@ -64,7 +64,8 @@ import {
   onSnapshot,
   doc,
   updateUserDisplayName,
-  where
+  where,
+  logWeight
 } from './lib/firebase';
 
 // --- Components ---
@@ -1389,9 +1390,9 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
     setLoading(true);
     const now = new Date();
     const ids = {
-      weekly: format(now, "yyyy-'w'w"),
-      monthly: format(now, "yyyy-MM"),
-      yearly: format(now, "yyyy")
+      weekly: format(now, 'yyyy-ww'),
+      monthly: format(now, 'yyyy-MM'),
+      yearly: format(now, 'yyyy')
     };
 
     let q;
@@ -1479,7 +1480,7 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
         <div className="flex justify-center py-20">
           <Dumbbell className="animate-spin text-brand-primary w-10 h-10" />
         </div>
-      ) : (
+      ) : rankings.length > 0 ? (
         <div className="space-y-3">
           {rankings.map((user, index) => {
             const isMe = user.uid === currentUser.uid;
@@ -1528,6 +1529,16 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
             );
           })}
         </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
+           <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center">
+              <Dumbbell className="text-gray-700 w-8 h-8" />
+           </div>
+           <div>
+             <p className="text-sm font-bold uppercase tracking-tight">Nenhum registro para este período</p>
+             <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">Seja o primeiro a treinar e assuma o topo!</p>
+           </div>
+        </div>
       )}
 
       {!rankings.some(u => u.uid === currentUser.uid) && !loading && (
@@ -1540,10 +1551,16 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
 function StatsView() {
   const [sessions, setSessions] = useState<WorkoutSession[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [weightHistory, setWeightHistory] = useState<any[]>([]);
+  const [newWeight, setNewWeight] = useState('');
 
   useEffect(() => {
     const unsubSessions = onSnapshot(query(getCollectionRef('sessions'), orderBy('date')), (snap) => {
       setSessions(snap.docs.map(d => d.data() as WorkoutSession));
+    });
+
+    const unsubWeight = onSnapshot(query(getCollectionRef('weight_history'), orderBy('date')), (snap) => {
+      setWeightHistory(snap.docs.map(d => d.data()));
     });
 
     async function loadExercises() {
@@ -1553,8 +1570,22 @@ function StatsView() {
     }
     
     loadExercises();
-    return () => unsubSessions();
+    return () => {
+      unsubSessions();
+      unsubWeight();
+    };
   }, []);
+
+  const handleLogWeight = async () => {
+    const w = parseFloat(newWeight);
+    if (isNaN(w) || w <= 0 || !auth.currentUser) return;
+    try {
+      await logWeight(auth.currentUser.uid, w);
+      setNewWeight('');
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const dataLines = sessions.map(s => ({
     date: format(s.date, 'dd/MM'),
@@ -1627,6 +1658,39 @@ function StatsView() {
               </ResponsiveContainer>
             ) : (
               <div className="flex items-center justify-center h-full text-muted italic">Aguardando dados...</div>
+            )}
+         </Card>
+      </section>
+
+      <section className="space-y-3">
+         <div className="flex items-center justify-between">
+            <h2 className="text-lg italic">Evolução de Peso</h2>
+            <div className="flex gap-2">
+               <input 
+                 type="number" 
+                 placeholder="0.0" 
+                 value={newWeight} 
+                 onChange={(e) => setNewWeight(e.target.value)}
+                 className="w-16 bg-white/5 border border-white/10 rounded-lg px-2 text-sm text-center focus:border-brand-primary outline-none"
+               />
+               <Button variant="secondary" size="icon" className="h-8 w-8" onClick={handleLogWeight}><Plus size={16}/></Button>
+            </div>
+         </div>
+         <Card className="h-64 pt-6 text-[10px]">
+            {weightHistory.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={weightHistory.map(w => ({ date: format(w.date, 'dd/MM'), peso: w.weight })).slice(-15)}>
+                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                   <XAxis dataKey="date" stroke="#4a4a4a" tick={{ fill: '#8E8E93' }} />
+                   <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
+                   <Tooltip 
+                     contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                   />
+                   <Line type="monotone" dataKey="peso" stroke="#00FF00" strokeWidth={3} dot={{ fill: '#00FF00', r: 4 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted italic">Registre seu peso para ver o gráfico.</div>
             )}
          </Card>
       </section>

@@ -37,9 +37,23 @@
         "exercises": { "type": "array" },
         "totalVolume": { "type": "number" }
       }
+    },
+    "WeightRecord": {
+      "title": "WeightRecord",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "weight": { "type": "number" },
+        "date": { "type": "number" }
+      },
+      "required": ["weight", "date"]
     }
   },
   "firestore": {
+    "/users/{userId}/weight_history/{recordId}": {
+      "schema": "WeightRecord",
+      "description": "Historical body weight measurement"
+    },
     "/users/{userId}": {
       "schema": "User",
       "description": "Profile and stats"

@@ -94,7 +94,7 @@ export async function updateUserStats(uid: string, volumeIncrement: number) {
   const data = snap.data();
   
   const now = new Date();
-  const weekId = format(now, "yyyy-'w'w"); 
+  const weekId = format(now, 'yyyy-ww'); 
   const monthId = format(now, 'yyyy-MM');
   const yearId = format(now, 'yyyy');
 
@@ -136,6 +136,16 @@ export async function updateUserDisplayName(uid: string, newName: string) {
   await updateDoc(userRef, {
     displayName: newName,
     lastActive: Date.now()
+  });
+}
+
+export async function logWeight(uid: string, weight: number) {
+  const ref = collection(db, 'users', uid, 'weight_history');
+  const id = format(new Date(), 'yyyy-MM-dd');
+  await setDoc(doc(ref, id), {
+    id,
+    weight,
+    date: Date.now()
   });
 }
 
