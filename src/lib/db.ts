@@ -55,6 +55,15 @@ export interface UserStats {
   lastWorkoutDate?: number;
 }
 
+export interface PersonalRecord {
+  exerciseId: string;
+  exerciseName: string;
+  weight: number;
+  reps: number;
+  date: number;
+  sessionId: string;
+}
+
 export const DEFAULT_EXERCISES: Exercise[] = [
   // Peito
   { id: 'p1', name: 'Supino Reto com Barra', muscleGroup: 'Peito' },

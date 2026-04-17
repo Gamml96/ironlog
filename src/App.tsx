@@ -65,8 +65,10 @@ import {
   updateUserDisplayName,
   where,
   logWeight,
-  deleteSession
+  deleteSession,
+  updatePersonalRecords
 } from './lib/firebase';
+import { PersonalRecord } from './lib/db';
 
 // --- Components ---
 
@@ -227,6 +229,7 @@ export default function App() {
           onClose={() => setActiveWorkout(null)} 
           onSave={async (w) => {
              await saveToCloud('sessions', w);
+             if (user) await updatePersonalRecords(user.uid, w);
              setActiveWorkout(null);
              setRefreshKey(k => k + 1);
              confetti({
@@ -299,7 +302,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
       <Card className="w-full space-y-6 text-center shadow-2xl relative z-10 border-white/10">
         <div>
-          <h2 className="text-xl font-black italic mb-2 uppercase">Bem-vindo, Guerreiro.</h2>
+          <h2 className="text-xl font-black italic mb-2 uppercase">Bem-vindo(a), Guerreiro(a).</h2>
           <p className="text-gray-400 text-sm">Entre com sua conta Google para sincronizar seus treinos e competir no ranking global.</p>
         </div>
         
@@ -1827,6 +1830,7 @@ function ExerciciosView() {
 
 function ProgressoView() {
    const [weightHistory, setWeightHistory] = useState<any[]>([]);
+   const [personalRecords, setPersonalRecords] = useState<PersonalRecord[]>([]);
    const [newWeight, setNewWeight] = useState('');
    const [isLogging, setIsLogging] = useState(false);
 
@@ -1834,7 +1838,15 @@ function ProgressoView() {
       const unsubWeight = onSnapshot(query(getCollectionRef('weight_history'), orderBy('date')), (snap) => {
          setWeightHistory(snap.docs.map(d => d.data()));
       });
-      return () => unsubWeight();
+      
+      const unsubPRs = onSnapshot(query(getCollectionRef('personal_records'), orderBy('exerciseName')), (snap) => {
+         setPersonalRecords(snap.docs.map(d => d.data() as PersonalRecord));
+      });
+
+      return () => {
+        unsubWeight();
+        unsubPRs();
+      };
    }, []);
 
    const handleLogWeight = async () => {
@@ -1865,7 +1877,31 @@ function ProgressoView() {
                <Trophy size={20} className="text-yellow-500" />
                <h2 className="text-lg italic uppercase">Recordes Pessoais</h2>
             </div>
-            <p className="text-xs text-muted italic px-2">Em breve: Acompanhamento de PRs por exercício.</p>
+            
+            {personalRecords.length > 0 ? (
+              <div className="grid grid-cols-1 gap-3">
+                {personalRecords.map(pr => (
+                  <Card key={pr.exerciseId} className="flex items-center justify-between py-4 px-5 border-l-4 border-l-yellow-500/50">
+                    <div>
+                      <h4 className="font-bold text-sm tracking-tight text-white/90">{pr.exerciseName}</h4>
+                      <p className="text-[10px] text-muted uppercase font-bold tracking-widest mt-0.5">{format(pr.date, 'dd MMM yyyy', { locale: ptBR })}</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-brand-primary text-xl font-black italic tabular-nums leading-none">
+                        {pr.weight}
+                        <span className="text-[10px] ml-0.5 not-italic text-muted">KG</span>
+                      </div>
+                      <p className="text-[10px] text-muted font-bold tracking-widest leading-none mt-1">{pr.reps} REPS</p>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card className="text-center py-8">
+                <Trophy className="w-10 h-10 text-gray-700 mx-auto mb-2 opacity-20" />
+                <p className="text-xs text-muted italic">Complete treinos para registrar seus recordes.</p>
+              </Card>
+            )}
          </section>
 
          <section className="space-y-4">
