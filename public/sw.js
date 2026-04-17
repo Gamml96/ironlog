@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ironlog-v6';
+const CACHE_NAME = 'ironlog-v7';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
