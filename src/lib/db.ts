@@ -1,5 +1,3 @@
-import { openDB, DBSchema, IDBPDatabase } from 'idb';
-
 export interface Exercise {
   id: string;
   name: string;
@@ -57,46 +55,6 @@ export interface UserStats {
   lastWorkoutDate?: number;
 }
 
-interface IronLogDB extends DBSchema {
-  exercises: {
-    key: string;
-    value: Exercise;
-    indexes: { 'by-muscle': string };
-  };
-  plans: {
-    key: string;
-    value: WorkoutPlan;
-    indexes: { 'by-order': number };
-  };
-  sessions: {
-    key: string;
-    value: WorkoutSession;
-    indexes: { 'by-date': number; 'by-plan': string };
-  };
-  settings: {
-    key: string;
-    value: any;
-  };
-}
-
-let dbPromise: Promise<IDBPDatabase<IronLogDB>>;
-
-export const initDB = () => {
-  if (!dbPromise) {
-    dbPromise = openDB<IronLogDB>('ironlog-db', 2, {
-      upgrade(db, oldVersion, newVersion) {
-        if (oldVersion < 1) {
-          db.createObjectStore('exercises', { keyPath: 'id' }).createIndex('by-muscle', 'muscleGroup');
-          db.createObjectStore('plans', { keyPath: 'id' }).createIndex('by-order', 'order');
-          db.createObjectStore('sessions', { keyPath: 'id' }).createIndex('by-date', 'date');
-          db.createObjectStore('settings', { keyPath: 'id' });
-        }
-      },
-    });
-  }
-  return dbPromise;
-};
-
 export const DEFAULT_EXERCISES: Exercise[] = [
   // Peito
   { id: 'p1', name: 'Supino Reto com Barra', muscleGroup: 'Peito' },
@@ -133,15 +91,3 @@ export const DEFAULT_EXERCISES: Exercise[] = [
   { id: 'a2', name: 'Prancha Isométrica', muscleGroup: 'Core' },
   { id: 'a3', name: 'Elevação de Pernas', muscleGroup: 'Core' },
 ];
-
-export async function seedDatabase() {
-  const db = await initDB();
-  const tx = db.transaction('exercises', 'readwrite');
-  const count = await tx.store.count();
-  if (count === 0) {
-    for (const ex of DEFAULT_EXERCISES) {
-      await tx.store.put(ex);
-    }
-  }
-  await tx.done;
-}

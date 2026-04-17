@@ -16,8 +16,10 @@ import {
   getDocs,
   deleteDoc,
   writeBatch,
-  where
+  where,
+  writeBatch as firebaseWriteBatch
 } from 'firebase/firestore';
+import { DEFAULT_EXERCISES, Exercise } from './db';
 
 export { 
   getFirestore, 
@@ -76,11 +78,24 @@ export async function loginWithGoogle() {
       });
     } else {
       await updateDoc(userRef, {
-        displayName: user.displayName || userSnap.data().displayName,
-        photoURL: user.photoURL || userSnap.data().photoURL,
+        displayName: user.displayName || (userSnap.data() as any).displayName,
+        photoURL: user.photoURL || (userSnap.data() as any).photoURL,
         lastActive: Date.now()
       });
     }
+
+    // Ensure exercises are seeded if empty (for new or partial migrated users)
+    const exercisesRef = collection(db, 'users', user.uid, 'exercises');
+    const exercisesSnap = await getDocs(exercisesRef);
+    if (exercisesSnap.empty) {
+      const batch = firebaseWriteBatch(db);
+      DEFAULT_EXERCISES.forEach(ex => {
+        const exRef = doc(exercisesRef, ex.id);
+        batch.set(exRef, { ...ex, uid: user.uid });
+      });
+      await batch.commit();
+    }
+
     return user;
   } catch (error) {
     console.error("Error logging in with Google:", error);

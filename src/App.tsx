@@ -37,8 +37,6 @@ import confetti from 'canvas-confetti';
 import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
 
 import { 
-  initDB, 
-  seedDatabase, 
   WorkoutPlan, 
   WorkoutSession, 
   Exercise, 
@@ -123,26 +121,28 @@ const Badge = ({ children, variant = 'primary' }: { children: React.ReactNode, v
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'hoje' | 'treinos' | 'progresso' | 'exercicios' | 'stats' | 'config' | 'ranking'>('hoje');
-  const [dbReady, setDbReady] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [migrating, setMigrating] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, volume: number, date: number } | null>(null);
 
   const handleDeleteSession = async (sessionId: string, volume: number, date: number) => {
-    if (!window.confirm('Excluir este treino? A tonelagem total será subtraída do seu perfil.')) return;
+    setDeleteConfirm({ id: sessionId, volume, date });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirm || !user) return;
     try {
-      await deleteSession(user!.uid, sessionId, volume, date);
+      await deleteSession(user.uid, deleteConfirm.id, deleteConfirm.volume, deleteConfirm.date);
       setRefreshKey(k => k + 1);
+      setDeleteConfirm(null);
     } catch (err) {
       console.error(err);
     }
   };
 
   useEffect(() => {
-    seedDatabase().then(() => setDbReady(true));
-    
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
@@ -150,75 +150,11 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (user && dbReady) {
-      handleMigration();
-    }
-  }, [user, dbReady]);
-
-  async function handleMigration() {
-    const dbLocal = await initDB();
-    const settings = await dbLocal.get('settings', 'user-settings');
-    
-    // Check if we already migrated to avoid redundant writes
-    if (settings?.migratedToCloud) return;
-
-    setMigrating(true);
-    try {
-      const batch = writeBatch(db);
-      
-      // 1. Migrate Plans
-      const plans = await dbLocal.getAll('plans');
-      plans.forEach(p => {
-        batch.set(getDocRef('plans', p.id), { ...p, uid: user?.uid });
-      });
-
-      // 2. Migrate Custom Exercises
-      const exercises = await dbLocal.getAll('exercises');
-      exercises.forEach(e => {
-        batch.set(getDocRef('exercises', e.id), { ...e, uid: user?.uid });
-      });
-
-      // 3. Migrate Sessions
-      const sessions = await dbLocal.getAll('sessions');
-      sessions.forEach(s => {
-        batch.set(getDocRef('sessions', s.id), { ...s, uid: user?.uid });
-      });
-
-      // 4. Migrate Settings
-      const cloudSettings = { 
-        ...(settings || {}), 
-        id: 'user-settings', 
-        uid: user?.uid, 
-        migratedToCloud: true 
-      };
-      batch.set(getDocRef('settings', 'user-settings'), cloudSettings);
-
-      // 5. Update user profile stats initially
-      const totalVol = sessions.reduce((acc, s) => acc + (s.totalVolume || 0), 0);
-      batch.update(doc(db, 'users', user?.uid!), {
-        totalVolume: totalVol,
-        totalWorkouts: sessions.length
-      });
-
-      await batch.commit();
-      
-      // Update local storage to reflect migration completion
-      await dbLocal.put('settings', cloudSettings);
-      
-      console.log("Migration to cloud completed successfully.");
-    } catch (err) {
-      console.error("Migration failed:", err);
-    } finally {
-      setMigrating(false);
-    }
-  }
-
-  if (!dbReady || authLoading || migrating) return (
+  if (authLoading) return (
     <div className="flex flex-col items-center justify-center h-screen bg-bg-base">
       <Dumbbell className="w-12 h-12 text-brand-primary animate-pulse mb-4" />
       <h1 className="text-2xl font-display text-white italic">
-        {migrating ? 'Sincronizando com a Nuvem...' : 'Carregando IronLog...'}
+        Carregando IronLog...
       </h1>
     </div>
   );
@@ -301,6 +237,33 @@ export default function App() {
              });
           }}
         />
+      )}
+
+      {/* Custom Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm">
+          <Card className="w-full max-w-sm border-brand-primary/20 shadow-2xl">
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto">
+                <AlertTriangle className="text-red-500 w-8 h-8" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black italic uppercase">Excluir Treino?</h3>
+                <p className="text-gray-400 text-sm mt-2">
+                  Esta ação é permanente. A tonelagem e estatísticas deste treino serão removidas do seu perfil.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 pt-2">
+                <Button variant="danger" className="w-full" onClick={confirmDelete}>
+                  Sim, Excluir Definitivamente
+                </Button>
+                <Button variant="ghost" className="w-full" onClick={() => setDeleteConfirm(null)}>
+                  Não, Manter Treino
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   );
@@ -605,24 +568,32 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
         </div>
         {recentSessions.length > 0 ? (
           recentSessions.map(session => (
-            <Card key={session.id} className="flex items-center gap-4 group relative overflow-hidden">
-               <div 
-                 className="absolute inset-0 bg-brand-primary/10 flex items-center justify-center gap-4 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm z-10 cursor-default"
-                 onClick={(e) => e.stopPropagation()}
-               >
-                  <Button variant="secondary" size="sm" className="gap-2 h-10 px-4" onClick={() => onEditSession(session)}><Edit2 size={16} /> Editar</Button>
-                  <Button variant="destructive" size="sm" className="gap-2 h-10 px-4" onClick={() => onDeleteSession(session.id, session.totalVolume, session.date)}><Trash2 size={16} /> Excluir</Button>
-               </div>
-
-               <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-brand-primary">
+            <Card key={session.id} className="flex items-center gap-4 relative pr-2">
+               <div className="w-12 h-12 bg-white/5 rounded-xl flex items-center justify-center text-brand-primary shrink-0">
                  <History size={24} />
                </div>
-               <div className="flex-1">
+               <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-start">
-                     <h4 className="font-bold text-sm">{session.workoutPlanName}</h4>
-                     <span className="text-[10px] text-gray-500 uppercase">{isToday(session.date) ? 'Hoje' : isYesterday(session.date) ? 'Ontem' : format(session.date, 'dd/MM')}</span>
+                     <h4 className="font-bold text-sm truncate">{session.workoutPlanName}</h4>
+                     <span className="text-[10px] text-gray-500 uppercase shrink-0">{isToday(session.date) ? 'Hoje' : isYesterday(session.date) ? 'Ontem' : format(session.date, 'dd/MM')}</span>
                   </div>
                   <p className="text-xs text-gray-500 font-mono">Volume: {session.totalVolume}kg • {session.exercises.length} ex.</p>
+               </div>
+               <div className="flex items-center gap-1 shrink-0">
+                  <button 
+                    onClick={() => onEditSession(session)} 
+                    className="p-2 text-gray-500 hover:text-white transition-colors"
+                    title="Editar treino"
+                  >
+                    <Edit2 size={18} />
+                  </button>
+                  <button 
+                    onClick={() => onDeleteSession(session.id, session.totalVolume, session.date)} 
+                    className="p-2 text-gray-500 hover:text-red-500 transition-colors"
+                    title="Excluir treino"
+                  >
+                    <Trash2 size={18} />
+                  </button>
                </div>
             </Card>
           ))
@@ -710,6 +681,7 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
   const [showExPicker, setShowExPicker] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [exSearch, setExSearch] = useState('');
+  const [exFilter, setExFilter] = useState('Todos');
   const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [newExName, setNewExName] = useState('');
   const [newExGroup, setNewExGroup] = useState('Peito');
@@ -730,11 +702,13 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
     try {
       const snap = await getDocs(getCollectionRef('exercises'));
       const custom = snap.docs.map(d => d.data() as Exercise);
-      setExercises([...DEFAULT_EXERCISES, ...custom]);
+      // Sort by name
+      const sorted = custom.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setExercises(sorted);
     } catch (err) {
       console.error("Error loading exercises:", err);
-      // Fallback to defaults if cloud fails
-      setExercises(DEFAULT_EXERCISES);
+      // Fallback is empty if cloud fails and we strictly want cloud
+      setExercises([]);
     }
   }
 
@@ -767,10 +741,11 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
     setNewExName('');
   };
 
-  const filteredExercises = exercises.filter(ex => 
-    (ex.name || '').toLowerCase().includes((exSearch || '').toLowerCase()) ||
-    (ex.muscleGroup || '').toLowerCase().includes((exSearch || '').toLowerCase())
-  );
+  const filteredExercises = exercises.filter(ex => {
+    const matchesSearch = (ex.name || '').toLowerCase().includes((exSearch || '').toLowerCase());
+    const matchesFilter = exFilter === 'Todos' || ex.muscleGroup === exFilter;
+    return matchesSearch && matchesFilter;
+  });
 
   const removeExercise = (idx: number) => {
     setEditedPlan(prev => ({
@@ -1426,42 +1401,39 @@ function SettingsView({ onBack, onLogout }: { onBack: () => void, onLogout: () =
 function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
   const [rankings, setRankings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [category, setCategory] = useState<'volume' | 'workouts'>('volume');
   const [range, setRange] = useState<'weekly' | 'monthly' | 'yearly' | 'total'>('total');
 
   useEffect(() => {
     setLoading(true);
     const now = new Date();
-    const ids = {
+    const periodIds = {
       weekly: format(now, 'yyyy-ww'),
       monthly: format(now, 'yyyy-MM'),
       yearly: format(now, 'yyyy')
     };
 
-    let q;
-    if (range === 'total') {
-      const field = category === 'volume' ? 'totalVolume' : 'totalWorkouts';
-      q = query(collection(db, 'users'), orderBy(field, 'desc'), limit(50));
-    } else {
-      const idField = `${range}.id`;
-      const currentId = ids[range as keyof typeof ids];
-      // Fetch active users for this period, sorting will happen client-side 
-      // to avoid requiring manual index creation in Firestore Console
-      q = query(
-        collection(db, 'users'), 
-        where(idField, '==', currentId),
-        limit(150)
-      );
-    }
+    // Pull users with at least one workout, sorted by totalWorkouts (the main metric)
+    // This allows "pulling all history" efficiently.
+    const q = query(
+      collection(db, 'users'), 
+      where('totalWorkouts', '>', 0),
+      limit(100)
+    );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
       
-      // Secondary sort in memory if using periodic ranking (avoids composite index errors)
-      if (range !== 'total') {
-        const field = category === 'volume' ? 'volume' : 'workouts';
-        data = data.sort((a, b) => (b[range]?.[field] || 0) - (a[range]?.[field] || 0))
-                   .slice(0, 50);
+      if (range === 'total') {
+        data = data.sort((a, b) => (b.totalWorkouts || 0) - (a.totalWorkouts || 0)).slice(0, 50);
+      } else {
+        // Evaluate periodic strikes for the current selected range
+        // Filter users who were active in this period OR just show everyone sorted by period stats
+        const currentId = periodIds[range as keyof typeof periodIds];
+        data = data.sort((a, b) => {
+          const valA = a[range]?.id === currentId ? (a[range]?.workouts || 0) : 0;
+          const valB = b[range]?.id === currentId ? (b[range]?.workouts || 0) : 0;
+          return valB - valA;
+        }).slice(0, 50);
       }
       
       setRankings(data);
@@ -1472,7 +1444,7 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [category, range]);
+  }, [range]);
 
   return (
     <motion.div 
@@ -1484,20 +1456,10 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/10 rounded-full blur-3xl pointer-events-none" />
         <h1 className="text-4xl italic font-black uppercase tracking-tighter leading-tight">Olimpo <span className="text-brand-primary">Iron</span></h1>
         
-        {/* Category Tabs */}
-        <div className="flex gap-2 mt-4 p-1 bg-white/5 rounded-xl border border-white/5">
-           <button 
-             onClick={() => setCategory('volume')}
-             className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${category === 'volume' ? 'bg-brand-primary text-black' : 'text-gray-500 hover:text-white'}`}
-           >
-             Tonelagem
-           </button>
-           <button 
-             onClick={() => setCategory('workouts')}
-             className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${category === 'workouts' ? 'bg-brand-primary text-black' : 'text-gray-500 hover:text-white'}`}
-           >
-             Strikes
-           </button>
+        {/* Metric Label */}
+        <div className="mt-4 flex items-center justify-between">
+           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Ranking por Frequência (Strikes)</p>
+           <Badge variant="primary">Workouts</Badge>
         </div>
 
         {/* Range Selector */}
@@ -1558,15 +1520,18 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
                    </div>
 
                    <div className="text-right">
-                      <p className="text-lg font-display font-black italic text-brand-primary leading-none">
-                        {category === 'volume' 
-                          ? `${((range === 'total' ? (user.totalVolume || 0) : (user[range]?.volume || 0)) / 1000).toFixed(1)}t` 
-                          : `${range === 'total' ? (user.totalWorkouts || 0) : (user[range]?.workouts || 0)}`}
-                      </p>
-                      <p className="text-[9px] text-gray-600 uppercase font-bold">
-                        {category === 'volume' ? (range === 'total' ? 'Ton. Total' : 'Volume') : (range === 'total' ? 'Treinos' : 'Frequência')}
-                      </p>
-                   </div>
+                       <p className="text-lg font-display font-black italic text-brand-primary leading-none">
+                         {(() => {
+                            if (range === 'total') return user.totalWorkouts || 0;
+                            const now = new Date();
+                            const pId = format(now, range === 'weekly' ? 'yyyy-ww' : range === 'monthly' ? 'yyyy-MM' : 'yyyy');
+                            return user[range]?.id === pId ? (user[range]?.workouts || 0) : 0;
+                         })()}
+                       </p>
+                       <p className="text-[9px] text-gray-600 uppercase font-bold">
+                          {range === 'total' ? 'Treinos' : 'Strikes'}
+                       </p>
+                    </div>
                 </Card>
               </motion.div>
             );
@@ -1728,10 +1693,13 @@ function ExerciciosView() {
     try {
       const snap = await getDocs(getCollectionRef('exercises'));
       const custom = snap.docs.map(d => d.data() as Exercise);
-      setExercises([...DEFAULT_EXERCISES, ...custom]);
+      // Sort by name
+      const sorted = custom.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      setExercises(sorted);
     } catch (err) {
       console.error("Error loading exercises:", err);
-      setExercises(DEFAULT_EXERCISES);
+      // No fallback to local since we seed cloud
+      setExercises([]);
     }
   }
 
