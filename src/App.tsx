@@ -687,9 +687,15 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
   }, []);
 
   async function loadExercises() {
-    const snap = await getDocs(getCollectionRef('exercises'));
-    const custom = snap.docs.map(d => d.data() as Exercise);
-    setExercises([...DEFAULT_EXERCISES, ...custom]);
+    try {
+      const snap = await getDocs(getCollectionRef('exercises'));
+      const custom = snap.docs.map(d => d.data() as Exercise);
+      setExercises([...DEFAULT_EXERCISES, ...custom]);
+    } catch (err) {
+      console.error("Error loading exercises:", err);
+      // Fallback to defaults if cloud fails
+      setExercises(DEFAULT_EXERCISES);
+    }
   }
 
   const addExercise = (ex: Exercise) => {
@@ -722,8 +728,8 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
   };
 
   const filteredExercises = exercises.filter(ex => 
-    ex.name.toLowerCase().includes(exSearch.toLowerCase()) ||
-    ex.muscleGroup.toLowerCase().includes(exSearch.toLowerCase())
+    (ex.name || '').toLowerCase().includes((exSearch || '').toLowerCase()) ||
+    (ex.muscleGroup || '').toLowerCase().includes((exSearch || '').toLowerCase())
   );
 
   const removeExercise = (idx: number) => {
@@ -1383,9 +1389,9 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
     setLoading(true);
     const now = new Date();
     const ids = {
-      weekly: format(now, 'yyyy-II'),
-      monthly: format(now, 'yyyy-MM'),
-      yearly: format(now, 'yyyy')
+      weekly: format(now, "yyyy-'w'w"),
+      monthly: format(now, "yyyy-MM"),
+      yearly: format(now, "yyyy")
     };
 
     let q;
@@ -1393,24 +1399,31 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
       const field = category === 'volume' ? 'totalVolume' : 'totalWorkouts';
       q = query(collection(db, 'users'), orderBy(field, 'desc'), limit(50));
     } else {
-      const field = category === 'volume' ? `${range}.volume` : `${range}.workouts`;
       const idField = `${range}.id`;
       const currentId = ids[range as keyof typeof ids];
+      // Fetch active users for this period, sorting will happen client-side 
+      // to avoid requiring manual index creation in Firestore Console
       q = query(
         collection(db, 'users'), 
         where(idField, '==', currentId),
-        orderBy(field, 'desc'), 
-        limit(50)
+        limit(150)
       );
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+      
+      // Secondary sort in memory if using periodic ranking (avoids composite index errors)
+      if (range !== 'total') {
+        const field = category === 'volume' ? 'volume' : 'workouts';
+        data = data.sort((a, b) => (b[range]?.[field] || 0) - (a[range]?.[field] || 0))
+                   .slice(0, 50);
+      }
+      
       setRankings(data);
       setLoading(false);
     }, (err) => {
       console.error("Ranking query error:", err);
-      // Fallback: clear rankings if error (likely missing index or no docs for period)
       setRankings([]);
       setLoading(false);
     });
@@ -1658,9 +1671,14 @@ function ExerciciosView() {
   }, []);
 
   async function loadExercises() {
-    const db = await initDB();
-    const all = await db.getAll('exercises');
-    setExercises(all);
+    try {
+      const snap = await getDocs(getCollectionRef('exercises'));
+      const custom = snap.docs.map(d => d.data() as Exercise);
+      setExercises([...DEFAULT_EXERCISES, ...custom]);
+    } catch (err) {
+      console.error("Error loading exercises:", err);
+      setExercises(DEFAULT_EXERCISES);
+    }
   }
 
   const createCustom = async () => {
@@ -1680,7 +1698,7 @@ function ExerciciosView() {
   const groups = ['Todos', 'Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'];
 
   const filtered = exercises.filter(ex => {
-    const matchesSearch = ex.name.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (ex.name || '').toLowerCase().includes((search || '').toLowerCase());
     const matchesFilter = filter === 'Todos' || ex.muscleGroup === filter;
     return matchesSearch && matchesFilter;
   });

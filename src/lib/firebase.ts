@@ -94,7 +94,7 @@ export async function updateUserStats(uid: string, volumeIncrement: number) {
   const data = snap.data();
   
   const now = new Date();
-  const weekId = format(now, 'yyyy-II'); // ISO week
+  const weekId = format(now, "yyyy-'w'w"); 
   const monthId = format(now, 'yyyy-MM');
   const yearId = format(now, 'yyyy');
 
