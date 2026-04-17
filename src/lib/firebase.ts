@@ -1,0 +1,157 @@
+import { initializeApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { format } from 'date-fns';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  increment, 
+  collection, 
+  query, 
+  orderBy, 
+  limit, 
+  onSnapshot,
+  getDocs,
+  deleteDoc,
+  writeBatch,
+  where
+} from 'firebase/firestore';
+
+export { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  updateDoc, 
+  increment, 
+  collection, 
+  query, 
+  orderBy, 
+  limit, 
+  onSnapshot,
+  getDocs,
+  deleteDoc,
+  writeBatch,
+  where
+};
+import firebaseConfig from '../../firebase-applet-config.json';
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const googleProvider = new GoogleAuthProvider();
+
+// Database Helper functions for user subcollections
+export const getCollectionRef = (sub: string) => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Auth required");
+  return collection(db, 'users', uid, sub);
+};
+
+export const getDocRef = (sub: string, id: string) => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Auth required");
+  return doc(db, 'users', uid, sub, id);
+};
+
+export async function loginWithGoogle() {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const user = result.user;
+    
+    // Create/Update user in Firestore
+    const userRef = doc(db, 'users', user.uid);
+    const userSnap = await getDoc(userRef);
+    
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        uid: user.uid,
+        displayName: user.displayName || 'Guerreiro IronLog',
+        photoURL: user.photoURL || '',
+        totalVolume: 0,
+        totalWorkouts: 0,
+        lastActive: Date.now()
+      });
+    } else {
+      await updateDoc(userRef, {
+        displayName: user.displayName || userSnap.data().displayName,
+        photoURL: user.photoURL || userSnap.data().photoURL,
+        lastActive: Date.now()
+      });
+    }
+    return user;
+  } catch (error) {
+    console.error("Error logging in with Google:", error);
+    throw error;
+  }
+}
+
+export async function updateUserStats(uid: string, volumeIncrement: number) {
+  const userRef = doc(db, 'users', uid);
+  const snap = await getDoc(userRef);
+  const data = snap.data();
+  
+  const now = new Date();
+  const weekId = format(now, 'yyyy-II'); // ISO week
+  const monthId = format(now, 'yyyy-MM');
+  const yearId = format(now, 'yyyy');
+
+  const updates: any = {
+    totalVolume: increment(volumeIncrement),
+    totalWorkouts: increment(1),
+    lastActive: Date.now()
+  };
+
+  // Weekly Stats
+  if (data?.weekly?.id === weekId) {
+    updates['weekly.volume'] = increment(volumeIncrement);
+    updates['weekly.workouts'] = increment(1);
+  } else {
+    updates.weekly = { id: weekId, volume: volumeIncrement, workouts: 1 };
+  }
+
+  // Monthly Stats
+  if (data?.monthly?.id === monthId) {
+    updates['monthly.volume'] = increment(volumeIncrement);
+    updates['monthly.workouts'] = increment(1);
+  } else {
+    updates.monthly = { id: monthId, volume: volumeIncrement, workouts: 1 };
+  }
+
+  // Yearly Stats
+  if (data?.yearly?.id === yearId) {
+    updates['yearly.volume'] = increment(volumeIncrement);
+    updates['yearly.workouts'] = increment(1);
+  } else {
+    updates.yearly = { id: yearId, volume: volumeIncrement, workouts: 1 };
+  }
+
+  await updateDoc(userRef, updates);
+}
+
+export async function updateUserDisplayName(uid: string, newName: string) {
+  const userRef = doc(db, 'users', uid);
+  await updateDoc(userRef, {
+    displayName: newName,
+    lastActive: Date.now()
+  });
+}
+
+// Data Methods
+export async function saveToCloud(collectionName: string, data: any) {
+  const ref = getDocRef(collectionName, data.id || 'default');
+  await setDoc(ref, data);
+}
+
+export async function deleteFromCloud(collectionName: string, id: string) {
+  const ref = getDocRef(collectionName, id);
+  await deleteDoc(ref);
+}
+
+export async function getAllFromCloud(collectionName: string) {
+  const ref = getCollectionRef(collectionName);
+  const snap = await getDocs(ref);
+  return snap.docs.map(d => d.data());
+}

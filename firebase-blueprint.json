@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Public user profile for ranking",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "totalVolume": { "type": "number" },
+        "totalWorkouts": { "type": "number" },
+        "weekly": { "type": "object" },
+        "monthly": { "type": "object" },
+        "yearly": { "type": "object" },
+        "lastActive": { "type": "number" }
+      },
+      "required": ["uid", "displayName", "totalVolume", "totalWorkouts"]
+    },
+    "WorkoutPlan": {
+      "title": "WorkoutPlan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "exercises": { "type": "array" },
+        "order": { "type": "number" }
+      }
+    },
+    "WorkoutSession": {
+      "title": "WorkoutSession",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "number" },
+        "isCompleted": { "type": "boolean" },
+        "exercises": { "type": "array" },
+        "totalVolume": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Profile and stats"
+    },
+    "/users/{userId}/plans/{planId}": {
+      "schema": "WorkoutPlan",
+      "description": "User workout plans"
+    },
+    "/users/{userId}/sessions/{sessionId}": {
+      "schema": "WorkoutSession",
+      "description": "Workout history"
+    },
+    "/users/{userId}/exercises/{exId}": {
+      "schema": "object",
+      "description": "Exercises (including custom ones)"
+    },
+    "/users/{userId}/settings/{settingId}": {
+      "schema": "object",
+      "description": "App settings"
+    }
+  }
+}
