@@ -128,6 +128,19 @@ export default function App() {
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, volume: number, date: number } | null>(null);
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem('ironlog_tutorial_seen');
+    if (!hasSeenTutorial && !authLoading && user) {
+      setShowTutorial(true);
+    }
+  }, [authLoading, user]);
+
+  const closeTutorial = () => {
+    localStorage.setItem('ironlog_tutorial_seen', 'true');
+    setShowTutorial(false);
+  };
 
   const handleDeleteSession = async (sessionId: string, volume: number, date: number) => {
     setDeleteConfirm({ id: sessionId, volume, date });
@@ -149,6 +162,12 @@ export default function App() {
       setUser(u);
       setAuthLoading(false);
     });
+
+    // Request notification permissions
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+
     return () => unsubscribe();
   }, []);
 
@@ -268,6 +287,10 @@ export default function App() {
           </Card>
         </div>
       )}
+
+      <AnimatePresence>
+        {showTutorial && <OnboardingOverlay onClose={closeTutorial} />}
+      </AnimatePresence>
     </div>
   );
 }
@@ -316,6 +339,73 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
         Versão Estável 1.2.0 • 2026
       </footer>
     </div>
+  );
+}
+
+function OnboardingOverlay({ onClose }: { onClose: () => void }) {
+  const [step, setStep] = useState(0);
+  const steps = [
+    {
+      title: "Monte sua Armadura",
+      description: "Comece criando seus planos de treino na aba 'Treinos'. Adicione exercícios e defina tempos de descanso.",
+      icon: <Dumbbell className="w-12 h-12" />
+    },
+    {
+      title: "Rastreie cada Gota",
+      description: "Ao treinar, use o cronômetro de descanso. O app te avisará (mesmo em 2º plano) quando for hora da próxima série.",
+      icon: <Timer className="w-12 h-12" />
+    },
+    {
+      title: "Suba no Ranking",
+      description: "Cada quilo conta! Finalize seus treinos para somar pontos e ver sua evolução no ranking global.",
+      icon: <Trophy className="w-12 h-12" />
+    }
+  ];
+
+  const next = () => {
+    if (step < steps.length - 1) setStep(step + 1);
+    else onClose();
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[300] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6"
+    >
+      <div className="w-full max-w-sm flex flex-col items-center text-center">
+        <AnimatePresence mode="wait">
+          <motion.div 
+            key={step}
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -50 }}
+            className="space-y-8"
+          >
+            <div className="flex justify-center">
+              <div className="w-24 h-24 bg-brand-primary/20 rounded-full flex items-center justify-center text-brand-primary shadow-[0_0_40px_rgba(255,94,26,0.2)]">
+                {steps[step].icon}
+              </div>
+            </div>
+            <div>
+              <h2 className="text-3xl font-black italic uppercase italic leading-tight mb-4">{steps[step].title}</h2>
+              <p className="text-gray-400 text-base leading-relaxed">{steps[step].description}</p>
+            </div>
+          </motion.div>
+        </AnimatePresence>
+
+        <div className="flex gap-2 mt-12 mb-8">
+          {steps.map((_, i) => (
+            <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === step ? 'w-8 bg-brand-primary' : 'w-2 bg-white/10'}`} />
+          ))}
+        </div>
+
+        <Button onClick={next} className="w-full h-14 text-lg">
+          {step === steps.length - 1 ? "VAMOS TREINAR!" : "PRÓXIMO"}
+        </Button>
+      </div>
+    </motion.div>
   );
 }
 
@@ -1012,6 +1102,15 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
         setRestTime(prev => {
           if (prev <= 1) {
             if (window.navigator.vibrate) window.navigator.vibrate([200, 100, 200]);
+            
+            // Notification when timer ends
+            if ('Notification' in window && Notification.permission === 'granted') {
+              new Notification('IronLog: Descanso Concluído!', {
+                body: 'Hora de esmagar a próxima série!',
+                icon: 'https://img.icons8.com/ios-filled/512/dumbbell.png'
+              });
+            }
+            
             return 0;
           }
           return prev - 1;
@@ -1387,10 +1486,21 @@ function SettingsView({ onBack, onLogout }: { onBack: () => void, onLogout: () =
            </div>
         </Card>
 
-        <Button variant="danger" className="w-full flex gap-2 h-14" onClick={onLogout}>
-          <X className="w-5 h-5" /> Sair da Conta
-        </Button>
-      </section>
+          <Button variant="danger" className="w-full flex gap-2 h-14" onClick={onLogout}>
+            <X className="w-5 h-5" /> Sair da Conta
+          </Button>
+
+          <Button 
+            variant="ghost" 
+            className="w-full text-xs font-bold uppercase tracking-widest opacity-60 hover:opacity-100" 
+            onClick={() => {
+              localStorage.removeItem('ironlog_tutorial_seen');
+              window.location.reload();
+            }}
+          >
+            Ver Tutorial Novamente
+          </Button>
+        </section>
 
       <div className="pt-10 text-center">
          <p className="text-[10px] text-muted uppercase font-bold tracking-widest">IronLog v1.2.0 • Build 2026</p>
