@@ -25,7 +25,8 @@ import {
   X,
   Check,
   AlertTriangle,
-  Activity
+  Activity,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfWeek, endOfWeek, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
@@ -577,6 +578,8 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
         exerciseId: ex.exerciseId,
         exerciseName: '', // Will be resolved
         restTimer: ex.restTimer,
+        targetReps: ex.targetReps,
+        isVariationPerSet: ex.isVariationPerSet,
         sets: Array.from({ length: ex.targetSets }).map(() => ({
           weight: 0,
           reps: 0,
@@ -941,10 +944,33 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
                               newExs[idx].targetReps = e.target.value;
                               setEditedPlan({...editedPlan, exercises: newExs});
                             }}
-                            className="w-14 h-8 bg-white/5 border border-white/10 rounded text-center text-xs text-white"
+                            className="w-16 h-8 bg-white/5 border border-white/10 rounded text-center text-xs text-white"
+                            placeholder={ex.isVariationPerSet ? "12,10,8" : "10-12"}
                           />
-                          <span className="text-[9px] uppercase font-bold text-gray-500">reps</span>
+                          <button 
+                            onClick={() => {
+                              const newExs = [...editedPlan.exercises];
+                              newExs[idx].isVariationPerSet = !newExs[idx].isVariationPerSet;
+                              setEditedPlan({...editedPlan, exercises: newExs});
+                            }}
+                            className={`p-1.5 rounded-lg transition-colors flex items-center justify-center ${ex.isVariationPerSet ? 'bg-brand-primary text-black' : 'bg-white/5 text-gray-500 hover:text-white'}`}
+                            title={ex.isVariationPerSet ? "Séries variadas ativas" : "Ativar séries variadas"}
+                          >
+                            <Activity size={12} />
+                          </button>
+                          
+                          {ex.isVariationPerSet && (
+                            <div className="group relative">
+                              <Info size={12} className="text-brand-primary/60 cursor-help" />
+                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-black border border-white/10 p-2 rounded-lg text-[8px] leading-tight text-gray-400 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity pointer-events-none z-50">
+                                Use vírgulas para separar as repetições de cada série. Ex: <span className="text-brand-primary">12, 10, 8</span>
+                              </div>
+                            </div>
+                          )}
                         </div>
+                        {ex.isVariationPerSet && (
+                          <p className="text-[7px] text-brand-primary/50 uppercase font-black tracking-widest mt-1 ml-1">Usar vírgulas: 12,10,8</p>
+                        )}
 
                         <div className="flex items-center gap-1">
                           <input 
@@ -1303,40 +1329,50 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
                     <div className="text-center">Reps</div>
                     <div></div>
                   </div>
-                  {ex.sets.map((set, setIdx) => (
-                    <div 
-                      key={setIdx} 
-                      className={`grid grid-cols-[40px_1fr_1fr_50px] items-center gap-3 p-2 rounded-xl transition-all duration-300 ${set.completed ? 'bg-brand-secondary/10 border-brand-secondary/20' : 'bg-[#252525]'}`}
-                    >
-                       <div className="text-center font-display text-muted text-xl italic font-black">{setIdx + 1}</div>
-                       <div className="flex flex-col">
-                         <input 
-                           type="number"
-                           inputMode="decimal"
-                           value={set.weight || ''}
-                           onChange={(e) => updateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value))}
-                           className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0"
-                           placeholder="--"
-                         />
-                       </div>
-                       <div className="flex flex-col">
-                         <input 
-                           type="number"
-                           inputMode="numeric"
-                           value={set.reps || ''}
-                           onChange={(e) => updateSet(exIdx, setIdx, 'reps', parseInt(e.target.value))}
-                           className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0"
-                           placeholder="--"
-                         />
-                       </div>
-                       <button 
-                         onClick={() => toggleSet(exIdx, setIdx)}
-                         className={`h-10 w-10 flex items-center justify-center rounded-full transition-all border-2 ${set.completed ? 'bg-brand-secondary border-brand-secondary text-black' : 'bg-transparent border-muted/20 text-muted'}`}
-                       >
-                         {set.completed ? <CheckCircle2 size={24} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-full bg-current" />}
-                       </button>
-                    </div>
-                  ))}
+                  {ex.sets.map((set, setIdx) => {
+                    const getPlaceholder = () => {
+                      if (ex.isVariationPerSet && ex.targetReps) {
+                        const parts = ex.targetReps.split(',').map(p => p.trim());
+                        return parts[setIdx] || parts[parts.length - 1] || '--';
+                      }
+                      return ex.targetReps || '--';
+                    };
+
+                    return (
+                      <div 
+                        key={setIdx} 
+                        className={`grid grid-cols-[40px_1fr_1fr_50px] items-center gap-3 p-2 rounded-xl transition-all duration-300 ${set.completed ? 'bg-brand-secondary/10 border-brand-secondary/20' : 'bg-[#252525]'}`}
+                      >
+                         <div className="text-center font-display text-muted text-xl italic font-black">{setIdx + 1}</div>
+                         <div className="flex flex-col">
+                           <input 
+                             type="number"
+                             inputMode="decimal"
+                             value={set.weight || ''}
+                             onChange={(e) => updateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value))}
+                             className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0"
+                             placeholder="--"
+                           />
+                         </div>
+                         <div className="flex flex-col">
+                           <input 
+                             type="number"
+                             inputMode="numeric"
+                             value={set.reps || ''}
+                             onChange={(e) => updateSet(exIdx, setIdx, 'reps', parseInt(e.target.value))}
+                             className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0"
+                             placeholder={getPlaceholder()}
+                           />
+                         </div>
+                         <button 
+                           onClick={() => toggleSet(exIdx, setIdx)}
+                           className={`h-10 w-10 flex items-center justify-center rounded-full transition-all border-2 ${set.completed ? 'bg-brand-secondary border-brand-secondary text-black' : 'bg-transparent border-muted/20 text-muted'}`}
+                         >
+                           {set.completed ? <CheckCircle2 size={24} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-full bg-current" />}
+                         </button>
+                      </div>
+                    );
+                  })}
                </div>
             </div>
           );
