@@ -346,19 +346,34 @@ function OnboardingOverlay({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState(0);
   const steps = [
     {
-      title: "Monte sua Armadura",
-      description: "Comece criando seus planos de treino na aba 'Treinos'. Adicione exercícios e defina tempos de descanso.",
+      title: "Planeje sua Batalha",
+      description: "Na aba 'Treinos', crie seus planos personalizados. Adicione exercícios da biblioteca ou crie os seus próprios.",
       icon: <Dumbbell className="w-12 h-12" />
     },
     {
-      title: "Rastreie cada Gota",
-      description: "Ao treinar, use o cronômetro de descanso. O app te avisará (mesmo em 2º plano) quando for hora da próxima série.",
+      title: "Rastreio em Tempo Real",
+      description: "Durante o treino, registre cada série. O app calcula seu volume total automaticamente para você focar no esforço.",
+      icon: <Target className="w-12 h-12" />
+    },
+    {
+      title: "Descanso Inteligente",
+      description: "O cronômetro te avisa o momento exato de voltar à ação, com notificações em segundo plano para você não se perder.",
       icon: <Timer className="w-12 h-12" />
     },
     {
-      title: "Suba no Ranking",
-      description: "Cada quilo conta! Finalize seus treinos para somar pontos e ver sua evolução no ranking global.",
+      title: "Quebre seus Limites",
+      description: "Acompanhe seus Recordes Pessoais (PRs) e gráficos de evolução. Veja sua força crescer a cada semana.",
+      icon: <TrendingUp className="w-12 h-12" />
+    },
+    {
+      title: "Elite de Ferro",
+      description: "Compare sua tonelagem total no Ranking Global. Suba de nível e torne-se uma lenda na comunidade.",
       icon: <Trophy className="w-12 h-12" />
+    },
+    {
+      title: "Sua Experiência",
+      description: "Ajuste metas semanais e tempos de descanso padrão nas configurações para moldar o app ao seu estilo.",
+      icon: <Settings className="w-12 h-12" />
     }
   ];
 
@@ -375,35 +390,54 @@ function OnboardingOverlay({ onClose }: { onClose: () => void }) {
       className="fixed inset-0 z-[300] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6"
     >
       <div className="w-full max-w-sm flex flex-col items-center text-center">
+        <button 
+          onClick={onClose}
+          className="absolute top-8 right-8 text-white/20 hover:text-white transition-colors"
+        >
+          <X size={24} />
+        </button>
+
         <AnimatePresence mode="wait">
           <motion.div 
             key={step}
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -50 }}
+            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 1.1, y: -20 }}
             className="space-y-8"
           >
             <div className="flex justify-center">
-              <div className="w-24 h-24 bg-brand-primary/20 rounded-full flex items-center justify-center text-brand-primary shadow-[0_0_40px_rgba(255,94,26,0.2)]">
+              <div className="w-24 h-24 bg-brand-primary/20 rounded-3xl flex items-center justify-center text-brand-primary shadow-[0_0_50px_rgba(255,94,26,0.3)] rotate-3">
                 {steps[step].icon}
               </div>
             </div>
-            <div>
-              <h2 className="text-3xl font-black italic uppercase italic leading-tight mb-4">{steps[step].title}</h2>
-              <p className="text-gray-400 text-base leading-relaxed">{steps[step].description}</p>
+            <div className="px-4">
+              <h2 className="text-3xl font-black italic uppercase italic leading-tight mb-4 tracking-tighter">{steps[step].title}</h2>
+              <p className="text-gray-400 text-base leading-relaxed font-medium">{steps[step].description}</p>
             </div>
           </motion.div>
         </AnimatePresence>
 
-        <div className="flex gap-2 mt-12 mb-8">
+        <div className="flex gap-2 mt-12 mb-10">
           {steps.map((_, i) => (
-            <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === step ? 'w-8 bg-brand-primary' : 'w-2 bg-white/10'}`} />
+            <div 
+              key={i} 
+              className={`h-1.5 rounded-full transition-all duration-300 ${i === step ? 'w-8 bg-brand-primary' : i < step ? 'w-2 bg-brand-primary/40' : 'w-2 bg-white/10'}`} 
+            />
           ))}
         </div>
 
-        <Button onClick={next} className="w-full h-14 text-lg">
-          {step === steps.length - 1 ? "VAMOS TREINAR!" : "PRÓXIMO"}
+        <Button onClick={next} className="w-full h-14 text-lg font-black italic">
+          {step === steps.length - 1 ? "COMEÇAR AGORA" : "PRÓXIMO PASSO"}
         </Button>
+        
+        {step < steps.length - 1 && (
+          <button 
+            onClick={onClose}
+            className="mt-6 text-[10px] font-black uppercase tracking-[0.2em] text-white/30 hover:text-white transition-colors"
+          >
+            Pular Tutorial
+          </button>
+        )}
       </div>
     </motion.div>
   );
