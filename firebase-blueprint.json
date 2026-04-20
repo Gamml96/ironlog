@@ -47,9 +47,28 @@
         "date": { "type": "number" }
       },
       "required": ["weight", "date"]
+    },
+    "Group": {
+      "title": "Group",
+      "description": "Private competition group",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "competitionType": { "type": "string", "enum": ["volume", "strikes", "both"] },
+        "inviteCode": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "memberIds": { "type": "array" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "name", "competitionType", "inviteCode", "creatorId", "memberIds", "createdAt"]
     }
   },
   "firestore": {
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Private groups for specific user competitions"
+    },
     "/users/{userId}/weight_history/{recordId}": {
       "schema": "WeightRecord",
       "description": "Historical body weight measurement"
