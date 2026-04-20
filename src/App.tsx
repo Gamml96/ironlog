@@ -1211,10 +1211,22 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
             
             // Notification when timer ends
             if ('Notification' in window && Notification.permission === 'granted') {
-              new Notification('IronLog: Descanso Concluído!', {
+              const notificationTitle = 'IronLog: Descanso Concluído!';
+              const notificationOptions = {
                 body: 'Hora de esmagar a próxima série!',
-                icon: 'https://img.icons8.com/ios-filled/512/dumbbell.png'
-              });
+                icon: 'https://img.icons8.com/ios-filled/512/dumbbell.png',
+                vibrate: [200, 100, 200],
+                tag: 'rest-timer',
+                renotify: true
+              };
+
+              if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.ready.then(reg => {
+                  reg.showNotification(notificationTitle, notificationOptions);
+                });
+              } else {
+                new Notification(notificationTitle, notificationOptions);
+              }
             }
             
             return 0;
@@ -1620,6 +1632,48 @@ function SettingsView({ onBack, onLogout }: { onBack: () => void, onLogout: () =
               <p className="text-[10px] text-muted mt-2 leading-relaxed uppercase font-bold tracking-tight">
                 Quantos dias por semana você pretende treinar? Seus marcadores no topo da página refletirão esse objetivo.
               </p>
+           </div>
+        </Card>
+
+        <Card className="space-y-4">
+           <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-xs uppercase text-muted font-bold block tracking-widest">Notificações</label>
+                <div className={`px-2 py-1 rounded text-[9px] font-black uppercase ${
+                  typeof Notification === 'undefined' ? 'bg-gray-500/20 text-gray-500' :
+                  Notification.permission === 'granted' ? 'bg-brand-secondary text-black' : 'bg-red-500/20 text-red-500'
+                }`}>
+                  {typeof Notification === 'undefined' ? 'Não suportado' :
+                   Notification.permission === 'granted' ? 'Ativado' : 'Desativado'}
+                </div>
+              </div>
+              
+              <div className="flex gap-3">
+                <div className="flex-1">
+                   <p className="text-[10px] text-muted leading-relaxed uppercase font-bold tracking-tight">
+                     Ative as notificações para receber alertas quando o tempo de descanso terminar, mesmo com o app em segundo plano.
+                   </p>
+                   {window.self !== window.top && (
+                     <p className="text-[9px] text-brand-primary mt-1 uppercase font-bold">
+                       Importante: Abra o app em uma nova aba para as notificações funcionarem.
+                     </p>
+                   )}
+                </div>
+                {typeof Notification !== 'undefined' && Notification.permission !== 'granted' && (
+                  <Button 
+                    size="sm" 
+                    variant="primary" 
+                    className="h-10 px-4 text-[10px]"
+                    onClick={() => {
+                      Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') window.location.reload();
+                      });
+                    }}
+                  >
+                    Ativar
+                  </Button>
+                )}
+              </div>
            </div>
         </Card>
 
