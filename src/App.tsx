@@ -1900,6 +1900,9 @@ function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
   const [groupName, setGroupName] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(true);
+  const [newGroupStartDate, setNewGroupStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newGroupEndDate, setNewGroupEndDate] = useState(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+  const [newGroupRankingType, setNewGroupRankingType] = useState<'workouts' | 'frequency'>('workouts');
 
   useEffect(() => {
     // Listen to groups where user is a member
@@ -1930,7 +1933,7 @@ function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
   }, [currentUser.uid]);
 
   const createGroup = async () => {
-    if (!groupName.trim()) return;
+    if (!groupName.trim() || !newGroupStartDate || !newGroupEndDate) return;
     const gId = crypto.randomUUID();
     const newGroup: Group = {
       id: gId,
@@ -1938,7 +1941,10 @@ function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
       inviteCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
       creatorId: currentUser.uid,
       memberIds: [currentUser.uid],
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      startDate: new Date(newGroupStartDate + 'T00:00:00').getTime(),
+      endDate: new Date(newGroupEndDate + 'T23:59:59').getTime(),
+      rankingType: newGroupRankingType
     };
     try {
       await setDoc(doc(db, 'groups', gId), newGroup);
@@ -2020,7 +2026,17 @@ function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
                 <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                    <Users size={60} />
                 </div>
-                <h3 className="text-xl font-black italic mb-2 uppercase">{g.name}</h3>
+                                 <h3 className="text-xl font-black italic mb-1 uppercase">{g.name}</h3>
+                 <div className="flex flex-wrap items-center gap-2 mb-4">
+                    <div className="flex items-center gap-1.5 bg-brand-primary/10 px-2 py-1 rounded-lg border border-brand-primary/10">
+                       <Calendar size={10} className="text-brand-primary" />
+                       <span className="text-[8px] font-black uppercase text-brand-primary">Até {new Date(g.endDate).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
+                       {g.rankingType === 'workouts' ? <Trophy size={10} className="text-brand-secondary" /> : <Flame size={10} className="text-brand-secondary" />}
+                       <span className="text-[8px] font-black uppercase text-muted">{g.rankingType === 'workouts' ? 'Treinos' : 'Frequência'}</span>
+                    </div>
+                 </div>
                 <div className="flex items-center gap-3">
                    <div className="flex -space-x-2">
                       {g.memberIds.slice(0, 4).map((_, i) => (
@@ -2060,17 +2076,60 @@ function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
                        <h2 className="text-xl font-black italic uppercase">Novo Grupo</h2>
                        <button onClick={() => setShowCreate(false)} className="text-gray-500 hover:text-white"><X /></button>
                     </div>
-                    <div>
-                       <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Nome do Grupo</label>
-                       <input 
-                         autoFocus
-                         value={groupName}
-                         onChange={(e) => setGroupName(e.target.value)}
-                         className="w-full bg-white/5 border border-white/10 h-14 px-4 rounded-xl outline-none focus:border-brand-primary text-white font-display text-lg"
-                         placeholder="Ex: Monstros da City"
-                       />
+                    <div className="space-y-4">
+                       <div>
+                          <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Nome do Grupo</label>
+                          <input 
+                            autoFocus
+                            value={groupName}
+                            onChange={(e) => setGroupName(e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 h-14 px-4 rounded-xl outline-none focus:border-brand-primary text-white font-display text-lg"
+                            placeholder="Ex: Monstros da City"
+                          />
+                       </div>
+                       
+                       <div className="grid grid-cols-2 gap-3">
+                          <div>
+                             <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Início</label>
+                             <input 
+                               type="date"
+                               value={newGroupStartDate}
+                               onChange={(e) => setNewGroupStartDate(e.target.value)}
+                               className="w-full bg-white/5 border border-white/10 h-12 px-4 rounded-xl outline-none focus:border-brand-primary text-white text-xs uppercase"
+                             />
+                          </div>
+                          <div>
+                             <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Término</label>
+                             <input 
+                               type="date"
+                               value={newGroupEndDate}
+                               onChange={(e) => setNewGroupEndDate(e.target.value)}
+                               className="w-full bg-white/5 border border-white/10 h-12 px-4 rounded-xl outline-none focus:border-brand-primary text-white text-xs uppercase"
+                             />
+                          </div>
+                       </div>
+
+                       <div>
+                          <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Modalidade do Ranking</label>
+                          <div className="grid grid-cols-2 gap-2">
+                             <button 
+                               onClick={() => setNewGroupRankingType('workouts')}
+                               className={`h-12 rounded-xl flex items-center justify-center gap-2 border transition-all ${newGroupRankingType === 'workouts' ? 'border-brand-primary bg-brand-primary/10 text-brand-primary' : 'border-white/5 bg-white/5 text-gray-500 hover:bg-white/10'}`}
+                             >
+                                <Trophy size={14} />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-center">Treinos Totais</span>
+                             </button>
+                             <button 
+                               onClick={() => setNewGroupRankingType('frequency')}
+                               className={`h-12 rounded-xl flex items-center justify-center gap-2 border transition-all ${newGroupRankingType === 'frequency' ? 'border-brand-primary bg-brand-primary/10 text-brand-primary' : 'border-white/5 bg-white/5 text-gray-500 hover:bg-white/10'}`}
+                             >
+                                <Calendar size={14} />
+                                <span className="text-[10px] font-black uppercase tracking-widest text-center">Dias Diferentes</span>
+                             </button>
+                          </div>
+                       </div>
                     </div>
-                    <Button onClick={createGroup} className="w-full">Criar Grupo</Button>
+                    <Button onClick={createGroup} className="w-full">Criar Desafio</Button>
                  </Card>
               </motion.div>
            </div>
@@ -2152,13 +2211,25 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
             where('date', '<=', group.endDate!)
           );
           const snap = await getDocs(q);
-          stats[m.uid] = snap.size;
+          
+          if (group.rankingType === 'frequency') {
+            // Count distinct days
+            const days = new Set();
+            snap.docs.forEach(doc => {
+              const d = new Date(doc.data().date);
+              days.add(d.toDateString());
+            });
+            stats[m.uid] = days.size;
+          } else {
+            // Count total workouts
+            stats[m.uid] = snap.size;
+          }
         }));
         setChallengeStats(stats);
       } catch (e) { console.error(e); }
     };
     fetchChallengeStats();
-  }, [group.id, group.startDate, group.endDate, members.length]);
+  }, [group.id, group.startDate, group.endDate, members.length, group.rankingType]);
 
   const sortedMembers = [...members].sort((a, b) => {
     if (group.startDate && group.endDate) {
@@ -2208,11 +2279,19 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
         <div>
            <h1 className="text-3xl font-black italic uppercase leading-none">{group.name}</h1>
            {group.startDate && group.endDate ? (
-             <div className="mt-3 flex items-center gap-2 bg-brand-primary/10 border border-brand-primary/20 p-2 rounded-xl">
-               <Calendar size={14} className="text-brand-primary" />
-               <p className="text-[10px] font-black uppercase tracking-wider text-brand-primary">
-                 Desafio: {new Date(group.startDate).toLocaleDateString()} - {new Date(group.endDate).toLocaleDateString()}
-               </p>
+             <div className="mt-3 space-y-2">
+               <div className="flex items-center gap-2 bg-brand-primary/10 border border-brand-primary/20 p-2 rounded-xl">
+                 <Calendar size={14} className="text-brand-primary" />
+                 <p className="text-[10px] font-black uppercase tracking-wider text-brand-primary">
+                   Período: {new Date(group.startDate).toLocaleDateString()} - {new Date(group.endDate).toLocaleDateString()}
+                 </p>
+               </div>
+               <div className="flex items-center gap-2 bg-white/5 border border-white/10 p-2 rounded-xl">
+                 {group.rankingType === 'workouts' ? <Trophy size={14} className="text-brand-secondary" /> : <Flame size={14} className="text-brand-secondary" />}
+                 <p className="text-[10px] font-black uppercase tracking-wider text-muted">
+                   Modalidade: {group.rankingType === 'workouts' ? 'Máximo de Treinos' : 'Dias Treinados (Frequência)'}
+                 </p>
+               </div>
              </div>
            ) : (
              <p className="text-[10px] text-muted font-bold uppercase tracking-[0.2em] mt-2">Leaderboard do Grupo</p>
@@ -2278,13 +2357,15 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                       {member.uid === group.creatorId && <div className="p-0.5" title="Criador do Grupo"><Trophy size={10} className="text-yellow-500" /></div>}
                    </div>
                    <div className="flex items-center gap-2">
-                      <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">{member.totalWorkouts} treinos</p>
+                      <p className="text-[10px] text-brand-primary font-bold uppercase">
+                        {group.rankingType === 'frequency' ? 'Frequência Base' : 'Treinos Realizados'}
+                      </p>
                    </div>
                 </div>
                 <div className="text-right shrink-0">
                    <div className="flex flex-col items-end">
-                      <p className="text-[12px] text-brand-primary font-black uppercase leading-none tracking-tighter">
-                        { (group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0) } pts
+                      <p className="text-[14px] text-brand-primary font-black uppercase leading-none tracking-tighter">
+                        { (group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0) } <span className="text-[8px] opacity-70">pts</span>
                       </p>
                       <div className="flex items-center gap-1 mt-1">
                         <Flame size={10} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
