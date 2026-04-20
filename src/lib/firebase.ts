@@ -117,34 +117,44 @@ export async function updateUserStats(uid: string, volumeIncrement: number) {
   const monthId = format(now, 'yyyy-MM');
   const yearId = format(now, 'yyyy');
 
+  const lastActiveDate = data?.lastActive ? new Date(data.lastActive).toDateString() : '';
+  const isNewDay = lastActiveDate !== now.toDateString();
+
   const updates: any = {
     totalVolume: increment(volumeIncrement),
     totalWorkouts: increment(1),
     lastActive: Date.now()
   };
 
+  if (isNewDay) {
+    updates.totalFrequency = increment(1);
+  }
+
   // Weekly Stats
   if (data?.weekly?.id === weekId) {
     updates['weekly.volume'] = increment(volumeIncrement);
     updates['weekly.workouts'] = increment(1);
+    if (isNewDay) updates['weekly.frequency'] = increment(1);
   } else {
-    updates.weekly = { id: weekId, volume: volumeIncrement, workouts: 1 };
+    updates.weekly = { id: weekId, volume: volumeIncrement, workouts: 1, frequency: 1 };
   }
 
   // Monthly Stats
   if (data?.monthly?.id === monthId) {
     updates['monthly.volume'] = increment(volumeIncrement);
     updates['monthly.workouts'] = increment(1);
+    if (isNewDay) updates['monthly.frequency'] = increment(1);
   } else {
-    updates.monthly = { id: monthId, volume: volumeIncrement, workouts: 1 };
+    updates.monthly = { id: monthId, volume: volumeIncrement, workouts: 1, frequency: 1 };
   }
 
   // Yearly Stats
   if (data?.yearly?.id === yearId) {
     updates['yearly.volume'] = increment(volumeIncrement);
     updates['yearly.workouts'] = increment(1);
+    if (isNewDay) updates['yearly.frequency'] = increment(1);
   } else {
-    updates.yearly = { id: yearId, volume: volumeIncrement, workouts: 1 };
+    updates.yearly = { id: yearId, volume: volumeIncrement, workouts: 1, frequency: 1 };
   }
 
   await updateDoc(userRef, updates);

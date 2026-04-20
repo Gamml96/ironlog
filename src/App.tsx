@@ -1736,6 +1736,8 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
   const [rankings, setRankings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<'weekly' | 'monthly' | 'yearly' | 'total'>('total');
+  const [rankingType, setRankingType] = useState<'workouts' | 'frequency'>('workouts');
+  const [rankingStats, setRankingStats] = useState<Record<string, number>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -1746,28 +1748,64 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
       yearly: format(now, 'yyyy')
     };
 
-    // Pull users with at least one workout, sorted by totalWorkouts (the main metric)
-    // This allows "pulling all history" efficiently.
+    // Pull users with at least one workout
     const q = query(
       collection(db, 'users'), 
       where('totalWorkouts', '>', 0),
       limit(100)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
       let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
       
-      if (range === 'total') {
-        data = data.sort((a, b) => (b.totalWorkouts || 0) - (a.totalWorkouts || 0)).slice(0, 50);
+      const currentId = periodIds[range as keyof typeof periodIds];
+
+      // If frequency is selected, we need to calculate it from sessions
+      if (rankingType === 'frequency') {
+        const stats: Record<string, number> = {};
+        
+        await Promise.all(data.map(async (user) => {
+          let sessionQuery;
+          if (range === 'total') {
+            sessionQuery = query(collection(db, 'users', user.uid, 'sessions'), where('isCompleted', '==', true));
+          } else {
+            // Estimate timestamps for period
+            let start, end;
+            const now = new Date();
+            if (range === 'weekly') { start = startOfWeek(now).getTime(); end = endOfWeek(now).getTime(); }
+            else if (range === 'monthly') { start = new Date(now.getFullYear(), now.getMonth(), 1).getTime(); end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23).getTime(); }
+            else { start = new Date(now.getFullYear(), 0, 1).getTime(); end = new Date(now.getFullYear(), 11, 31, 23).getTime(); }
+
+            sessionQuery = query(
+              collection(db, 'users', user.uid, 'sessions'), 
+              where('isCompleted', '==', true),
+              where('date', '>=', start),
+              where('date', '<=', end)
+            );
+          }
+
+          const snap = await getDocs(sessionQuery);
+          const days = new Set();
+          snap.docs.forEach(doc => {
+            const sessionData = doc.data() as any;
+            days.add(new Date(sessionData.date).toDateString());
+          });
+          stats[user.uid] = days.size;
+        }));
+        
+        setRankingStats(stats);
+        data = data.sort((a, b) => (stats[b.uid] || 0) - (stats[a.uid] || 0)).slice(0, 50);
       } else {
-        // Evaluate periodic strikes for the current selected range
-        // Filter users who were active in this period OR just show everyone sorted by period stats
-        const currentId = periodIds[range as keyof typeof periodIds];
-        data = data.sort((a, b) => {
-          const valA = a[range]?.id === currentId ? (a[range]?.workouts || 0) : 0;
-          const valB = b[range]?.id === currentId ? (b[range]?.workouts || 0) : 0;
-          return valB - valA;
-        }).slice(0, 50);
+        // Fallback to pre-calculated stats for workouts
+        if (range === 'total') {
+          data = data.sort((a, b) => (b.totalWorkouts || 0) - (a.totalWorkouts || 0)).slice(0, 50);
+        } else {
+          data = data.sort((a, b) => {
+            const valA = a[range]?.id === currentId ? (a[range]?.workouts || 0) : 0;
+            const valB = b[range]?.id === currentId ? (b[range]?.workouts || 0) : 0;
+            return valB - valA;
+          }).slice(0, 50);
+        }
       }
       
       setRankings(data);
@@ -1778,7 +1816,7 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [range]);
+  }, [range, rankingType]);
 
   return (
     <motion.div 
@@ -1790,10 +1828,25 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/10 rounded-full blur-3xl pointer-events-none" />
         <h1 className="text-4xl italic font-black uppercase tracking-tighter leading-tight">Olimpo <span className="text-brand-primary">Iron</span></h1>
         
-        {/* Metric Label */}
+        {/* Metric Label and Selector */}
         <div className="mt-4 flex items-center justify-between">
-           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500">Ranking por Frequência (Strikes)</p>
-           <Badge variant="primary">Workouts</Badge>
+           <p className="text-[10px] font-black uppercase tracking-[0.1em] text-gray-500">
+             Ranking por {rankingType === 'workouts' ? 'Total de Treinos' : 'Frequência (Dias Únicos)'}
+           </p>
+           <div className="flex gap-2">
+              <button 
+                onClick={() => setRankingType('workouts')}
+                className={`p-1.5 rounded-lg border transition-all ${rankingType === 'workouts' ? 'border-brand-primary bg-brand-primary/10 text-brand-primary' : 'border-white/5 bg-white/5 text-gray-500 hover:bg-white/10'}`}
+              >
+                 <Trophy size={14} />
+              </button>
+              <button 
+                onClick={() => setRankingType('frequency')}
+                className={`p-1.5 rounded-lg border transition-all ${rankingType === 'frequency' ? 'border-brand-primary bg-brand-primary/10 text-brand-primary' : 'border-white/5 bg-white/5 text-gray-500 hover:bg-white/10'}`}
+              >
+                 <Calendar size={14} />
+              </button>
+           </div>
         </div>
 
         {/* Range Selector */}
@@ -1855,7 +1908,7 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
 
                    <div className="text-right">
                        <p className="text-lg font-display font-black italic text-brand-primary leading-none">
-                         {(() => {
+                         {rankingType === 'frequency' ? (rankingStats[user.uid] || 0) : (() => {
                             if (range === 'total') return user.totalWorkouts || 0;
                             const now = new Date();
                             const pId = format(now, range === 'weekly' ? 'yyyy-ww' : range === 'monthly' ? 'yyyy-MM' : 'yyyy');
@@ -1863,7 +1916,7 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
                          })()}
                        </p>
                        <p className="text-[9px] text-gray-600 uppercase font-bold">
-                          {range === 'total' ? 'Treinos' : 'Strikes'}
+                          {rankingType === 'frequency' ? 'Dias' : (range === 'total' ? 'Treinos' : 'Strikes')}
                        </p>
                     </div>
                 </Card>
