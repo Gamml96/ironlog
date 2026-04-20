@@ -71,6 +71,28 @@ import {
 } from './lib/firebase';
 import { PersonalRecord } from './lib/db';
 
+// --- Utilities ---
+
+const calculateEstimatedDuration = (plan: WorkoutPlan) => {
+  let totalSeconds = 0;
+  plan.exercises.forEach((ex, idx) => {
+    if (ex.targetDuration && ex.targetDuration > 0) {
+      totalSeconds += ex.targetDuration;
+    } else {
+      const setsNum = ex.targetSets || 1;
+      const rest = ex.restTimer || 60;
+      const timePerSet = 50; // Estimated execution time in seconds
+      totalSeconds += (setsNum * timePerSet) + ((setsNum - 1) * rest);
+    }
+    
+    // Add transition time between exercises (90s)
+    if (idx < plan.exercises.length - 1) {
+      totalSeconds += 90; 
+    }
+  });
+  return Math.max(5, Math.ceil(totalSeconds / 60));
+};
+
 // --- Components ---
 
 const Button = ({ 
@@ -664,7 +686,7 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
                 <div className="flex items-center gap-2 mb-6">
                   <span className="text-muted text-xs font-bold uppercase tracking-wider">{plans[0].exercises.length} Exercícios</span>
                   <div className="w-1 h-1 bg-muted/40 rounded-full" />
-                  <span className="text-muted text-xs font-bold uppercase tracking-wider">~45 min</span>
+                  <span className="text-muted text-xs font-bold uppercase tracking-wider">~{calculateEstimatedDuration(plans[0])} min</span>
                 </div>
                 <div className="flex items-center text-brand-primary text-sm font-black gap-2 uppercase tracking-tight">
                   Começar Agora <ArrowRight size={18} />
@@ -794,10 +816,11 @@ function TreinosView() {
                  <Button variant="danger" size="icon" className="h-10 w-10 p-0" onClick={() => deletePlan(plan.id)}><Trash2 size={16} /></Button>
                </div>
             </div>
-            <div className="flex flex-wrap gap-2 text-xs text-gray-500">
+            <div className="flex flex-wrap gap-2 text-xs text-gray-500 items-center">
+               <span className="text-brand-primary font-black uppercase tracking-tighter mr-2">~{calculateEstimatedDuration(plan)} min</span>
                {plan.exercises.length > 0 ? (
                  plan.exercises.slice(0, 3).map((ex, i) => (
-                   <span key={i} className="bg-white/5 px-2 py-1 rounded">{i === 2 && plan.exercises.length > 3 ? '...' : 'Exercício ' + (i+1)}</span>
+                   <span key={i} className="bg-white/5 px-2 py-1 rounded">{i === 2 && plan.exercises.length > 3 ? '...' : 'Ex ' + (i+1)}</span>
                  ))
                ) : (
                  <p className="italic">Vazio. Adicione exercícios.</p>
