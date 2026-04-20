@@ -35,6 +35,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
+import confetti from 'canvas-confetti';
 
 import { 
   WorkoutPlan, 
@@ -251,6 +252,12 @@ export default function App() {
              if (user) await updatePersonalRecords(user.uid, w);
              setActiveWorkout(null);
              setRefreshKey(k => k + 1);
+             confetti({
+               particleCount: 150,
+               spread: 70,
+               origin: { y: 0.6 },
+               colors: ['#FF5E1A', '#39FF14', '#ffffff']
+             });
           }}
         />
       )}
@@ -1432,17 +1439,17 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
           >
              <Card className="w-full max-w-sm space-y-6 text-center border-brand-primary/20">
                 <motion.div 
-                  initial={{ scale: 0.5 }}
-                  animate={{ scale: 1 }}
+                  initial={{ scale: 0.5, rotate: -20 }}
+                  animate={{ scale: 1, rotate: 0 }}
                   className="flex justify-center"
                 >
-                   <div className="w-20 h-20 bg-brand-secondary/20 rounded-full flex items-center justify-center text-brand-secondary">
-                      <CheckCircle2 size={40} />
+                   <div className="w-20 h-20 bg-brand-primary/20 rounded-full flex items-center justify-center text-brand-primary shadow-[0_0_30px_rgba(255,94,26,0.3)]">
+                      <Trophy size={40} className="animate-bounce" />
                    </div>
                 </motion.div>
                 <div>
-                   <h2 className="text-2xl italic font-black uppercase">Sessão Concluída</h2>
-                   <p className="text-gray-400 text-sm font-medium">Treino finalizado. Deseja registrar os dados desta sessão?</p>
+                   <h2 className="text-3xl italic font-black uppercase">Parabéns!</h2>
+                   <p className="text-gray-400 text-sm font-medium">Treino concluído com sucesso. Deseja registrar a sessão?</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                    <Button variant="secondary" onClick={() => setIsFinishing(false)}>Ainda não</Button>
