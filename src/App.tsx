@@ -1910,7 +1910,16 @@ function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
     );
     
     const unsub = onSnapshot(q, (snap) => {
-      setGroups(snap.docs.map(d => d.data() as Group));
+      const updatedGroups = snap.docs.map(d => d.data() as Group);
+      setGroups(updatedGroups);
+      
+      // Sync activeGroup if it's currently open
+      setActiveGroup(prevActive => {
+        if (!prevActive) return null;
+        const fresh = updatedGroups.find(g => g.id === prevActive.id);
+        return fresh || null;
+      });
+      
       setLoading(false);
     }, (err) => {
       console.error("Grupos listener error:", err);
@@ -2100,6 +2109,10 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [challengeStats, setChallengeStats] = useState<Record<string, number>>({});
+  const [showConfig, setShowConfig] = useState(false);
+  const [sDate, setSDate] = useState(group.startDate ? new Date(group.startDate).toISOString().split('T')[0] : '');
+  const [eDate, setEDate] = useState(group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '');
 
   useEffect(() => {
     setLoading(true);
@@ -2107,16 +2120,13 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
     const q = query(collection(db, 'users'), where('uid', 'in', group.memberIds));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => d.data());
-      // Sort by totalVolume for this specific comparison
-      data.sort((a, b) => (b.totalVolume || 0) - (a.totalVolume || 0));
       setMembers(data);
       setLoading(false);
     });
     return () => unsub();
-  }, [group.memberIds]);
+  }, [group.id, group.memberIds.join(',')]);
 
   const leaveGroup = async () => {
-    if (!confirm("Tem certeza que deseja sair do grupo?")) return;
     try {
       await updateDoc(doc(db, 'groups', group.id), {
         memberIds: arrayRemove(currentUser.uid)
@@ -2124,6 +2134,49 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
       onBack();
     } catch (err) {
       console.error(err);
+      alert("Erro ao sair do grupo.");
+    }
+  };
+
+  useEffect(() => {
+    if (!group.startDate || !group.endDate || members.length === 0) return;
+    
+    const fetchChallengeStats = async () => {
+      const stats: Record<string, number> = {};
+      try {
+        await Promise.all(members.map(async (m) => {
+          const q = query(
+            collection(db, 'users', m.uid, 'sessions'),
+            where('isCompleted', '==', true),
+            where('date', '>=', group.startDate!),
+            where('date', '<=', group.endDate!)
+          );
+          const snap = await getDocs(q);
+          stats[m.uid] = snap.size;
+        }));
+        setChallengeStats(stats);
+      } catch (e) { console.error(e); }
+    };
+    fetchChallengeStats();
+  }, [group.id, group.startDate, group.endDate, members.length]);
+
+  const sortedMembers = [...members].sort((a, b) => {
+    if (group.startDate && group.endDate) {
+      return (challengeStats[b.uid] || 0) - (challengeStats[a.uid] || 0);
+    }
+    return (b.totalWorkouts || 0) - (a.totalWorkouts || 0);
+  });
+
+  const updateChallenge = async () => {
+    if (!sDate || !eDate) return;
+    try {
+      await updateDoc(doc(db, 'groups', group.id), {
+        startDate: new Date(sDate + 'T00:00:00').getTime(),
+        endDate: new Date(eDate + 'T23:59:59').getTime()
+      });
+      setShowConfig(false);
+    } catch (e) {
+      alert("Erro ao salvar desafio.");
     }
   };
 
@@ -2147,13 +2200,57 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                 {copied ? 'Copiado!' : group.inviteCode}
               </button>
               <Button variant="danger" size="icon" onClick={leaveGroup} className="w-10 h-10 border-none bg-transparent hover:bg-red-500/10"><LogOut size={18} /></Button>
+               {currentUser.uid === group.creatorId && (
+                 <Button variant="ghost" size="icon" onClick={() => setShowConfig(!showConfig)} className="ml-2 w-10 h-10 bg-white/5 border border-white/10"><Calendar size={18} className="text-brand-primary" /></Button>
+               )}
            </div>
         </div>
         <div>
            <h1 className="text-3xl font-black italic uppercase leading-none">{group.name}</h1>
-           <p className="text-[10px] text-muted font-bold uppercase tracking-[0.2em] mt-2">Leaderboard do Grupo</p>
+           {group.startDate && group.endDate ? (
+             <div className="mt-3 flex items-center gap-2 bg-brand-primary/10 border border-brand-primary/20 p-2 rounded-xl">
+               <Calendar size={14} className="text-brand-primary" />
+               <p className="text-[10px] font-black uppercase tracking-wider text-brand-primary">
+                 Desafio: {new Date(group.startDate).toLocaleDateString()} - {new Date(group.endDate).toLocaleDateString()}
+               </p>
+             </div>
+           ) : (
+             <p className="text-[10px] text-muted font-bold uppercase tracking-[0.2em] mt-2">Leaderboard do Grupo</p>
+           )}
         </div>
       </header>
+
+      {showConfig && (
+        <Card className="bg-brand-secondary/50 border-brand-primary/20 animate-in fade-in slide-in-from-top-4">
+          <h3 className="font-black italic uppercase text-sm mb-4">Configurar Desafio</h3>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-muted">Início</label>
+                <input 
+                  type="date" 
+                  value={sDate}
+                  onChange={e => setSDate(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-white focus:border-brand-primary outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold uppercase text-muted">Fim</label>
+                <input 
+                  type="date" 
+                  value={eDate}
+                  onChange={e => setEDate(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold text-white focus:border-brand-primary outline-none transition-all"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button className="flex-1 text-[10px] font-black uppercase" onClick={updateChallenge}>Ativar Desafio</Button>
+              <Button variant="ghost" className="text-[10px] font-black uppercase" onClick={() => setShowConfig(false)}>Cancelar</Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {loading ? (
         <div className="flex justify-center py-20">
@@ -2161,7 +2258,7 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
         </div>
       ) : (
         <div className="space-y-3">
-           {members.map((member, idx) => (
+           {sortedMembers.map((member, idx) => (
              <Card 
                key={member.uid} 
                className={`flex items-center gap-4 transition-all ${member.uid === currentUser.uid ? 'border-brand-primary bg-brand-primary/5 shadow-[0_0_20px_rgba(255,94,26,0.05)]' : 'border-white/5 opacity-80'}`}
@@ -2182,14 +2279,17 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                    </div>
                    <div className="flex items-center gap-2">
                       <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">{member.totalWorkouts} treinos</p>
-                      <div className="w-1 h-1 bg-white/10 rounded-full" />
-                      <p className="text-[9px] text-brand-primary uppercase font-bold tracking-widest">{Math.round((member.totalVolume || 0) / 1000)}k KG</p>
                    </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                    <div className="flex flex-col items-end">
-                      <Flame size={14} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
-                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter mt-1">{member.streak || 0}d</p>
+                      <p className="text-[12px] text-brand-primary font-black uppercase leading-none tracking-tighter">
+                        { (group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0) } pts
+                      </p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <Flame size={10} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
+                        <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{member.streak || 0}d</p>
+                      </div>
                    </div>
                 </div>
              </Card>

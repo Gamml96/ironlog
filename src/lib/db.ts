@@ -77,6 +77,8 @@ export interface Group {
   creatorId: string;
   memberIds: string[];
   createdAt: number;
+  startDate?: number;
+  endDate?: number;
 }
 
 export interface GroupMemberStats {
