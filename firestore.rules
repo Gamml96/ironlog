@@ -12,7 +12,8 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return true;
+      return isAuthenticated() &&
+        (request.auth.token.email == "Gamml1996@gmail.com" && request.auth.token.email_verified == true);
     }
 
     function isValidUser(data) {
@@ -26,46 +27,15 @@ service cloud.firestore {
              (!('yearly' in data) || data.yearly is map);
     }
 
-    function isValidGroup(data) {
-      return data.id is string &&
-             data.name is string && data.name.size() >= 2 && data.name.size() <= 40 &&
-             data.inviteCode is string && data.inviteCode.size() >= 4 &&
-             data.creatorId is string &&
-             data.memberIds is list &&
-             data.createdAt is number;
-    }
-
-    match /test/connection {
-      allow read: if true;
-    }
-
-    match /groups/{groupId} {
+    match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && 
-                      request.resource.data.creatorId == request.auth.uid &&
-                      isValidGroup(request.resource.data) &&
-                      request.auth.uid in request.resource.data.memberIds;
-      allow update: if isAuthenticated() && (
-        (resource.data.creatorId == request.auth.uid && isValidGroup(request.resource.data)) ||
-        (
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
-          request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
-          request.auth.uid in request.resource.data.memberIds &&
-          request.resource.data.memberIds.hasAll(resource.data.memberIds)
-        )
-      );
-      allow delete: if isAuthenticated() && resource.data.creatorId == request.auth.uid;
-    }
+      allow create: if isOwner(userId) && request.resource.data.uid == request.auth.uid && isValidUser(request.resource.data);
+      allow update: if (isOwner(userId) && isValidUser(request.resource.data)) || isAdmin();
+      allow delete: if isAdmin();
 
-    match /users {
-      allow list: if isAdmin();
-      match /{userId} {
-        allow read, update, create, delete: if isAuthenticated() && (isOwner(userId) || isAdmin());
-
-        // Secure subcollections
-        match /{allSubcollections=**} {
-          allow read, write, list, delete: if isOwner(userId) || isAdmin();
-        }
+      // Secure subcollections
+      match /{allSubcollections=**} {
+        allow read, write: if isOwner(userId);
       }
     }
   }

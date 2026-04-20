@@ -70,25 +70,6 @@ export interface PersonalRecord {
   sessionId: string;
 }
 
-export interface Group {
-  id: string;
-  name: string;
-  competitionType: 'volume' | 'strikes' | 'both';
-  inviteCode: string;
-  creatorId: string;
-  memberIds: string[];
-  createdAt: number;
-}
-
-export interface GroupMemberStats {
-  userId: string;
-  displayName: string;
-  photoURL?: string;
-  totalVolume: number;
-  workoutCount: number;
-  lastWorkoutDate?: number;
-}
-
 export const DEFAULT_EXERCISES: Exercise[] = [
   // Peito
   { id: 'p1', name: 'Supino Reto com Barra', muscleGroup: 'Peito' },

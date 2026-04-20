@@ -26,11 +26,7 @@ import {
   Check,
   AlertTriangle,
   Activity,
-  Info,
-  Users,
-  Copy,
-  LogOut,
-  UserPlus
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfWeek, endOfWeek, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
@@ -48,18 +44,13 @@ import {
   WorkoutPlanExercise,
   ExerciseLog,
   SetLog,
-  DEFAULT_EXERCISES,
-  Group,
-  GroupMemberStats
+  DEFAULT_EXERCISES
 } from './lib/db';
 import { 
   auth, 
   loginWithGoogle, 
   db, 
   updateUserStats,
-  recalculateUserStats,
-  syncAllUserStats,
-  deleteAllWorkoutsGlobal,
   getCollectionRef,
   getDocRef,
   saveToCloud,
@@ -76,11 +67,7 @@ import {
   where,
   logWeight,
   deleteSession,
-  updatePersonalRecords,
-  arrayUnion,
-  arrayRemove,
-  setDoc,
-  updateDoc
+  updatePersonalRecords
 } from './lib/firebase';
 import { PersonalRecord } from './lib/db';
 
@@ -145,12 +132,12 @@ const Card = ({ children, className = "", onClick, borderAccent }: { children: R
   </div>
 );
 
-const Badge = ({ children, variant = 'primary', className = "" }: { children: React.ReactNode, variant?: 'primary' | 'secondary' | 'success', className?: string }) => (
+const Badge = ({ children, variant = 'primary' }: { children: React.ReactNode, variant?: 'primary' | 'secondary' | 'success' }) => (
   <span className={`px-2 py-0.5 rounded-sm text-[11px] font-black uppercase tracking-widest ${
     variant === 'primary' ? 'bg-brand-primary text-black' : 
     variant === 'success' ? 'bg-brand-secondary text-black' :
     'bg-white/10 text-white/40'
-  } ${className}`}>
+  }`}>
     {children}
   </span>
 );
@@ -158,7 +145,7 @@ const Badge = ({ children, variant = 'primary', className = "" }: { children: Re
 // --- App Entry & Navigation ---
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'hoje' | 'treinos' | 'progresso' | 'exercicios' | 'grupos' | 'config' | 'ranking'>('hoje');
+  const [activeTab, setActiveTab] = useState<'hoje' | 'treinos' | 'progresso' | 'exercicios' | 'stats' | 'config' | 'ranking'>('hoje');
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
@@ -235,9 +222,9 @@ export default function App() {
           {activeTab === 'treinos' && <TreinosView />}
           {activeTab === 'progresso' && <ProgressoView />}
           {activeTab === 'exercicios' && <ExerciciosView />}
-          {activeTab === 'grupos' && <GruposView currentUser={user} />}
+          {activeTab === 'stats' && <StatsView />}
           {activeTab === 'ranking' && <RankingView currentUser={user} />}
-          {activeTab === 'config' && <SettingsView user={user} onBack={() => setActiveTab('hoje')} onLogout={() => signOut(auth)} />}
+          {activeTab === 'config' && <SettingsView onBack={() => setActiveTab('hoje')} onLogout={() => signOut(auth)} />}
         </AnimatePresence>
       </main>
 
@@ -271,9 +258,9 @@ export default function App() {
         <div className="flex items-center justify-around h-20 max-w-md mx-auto px-2">
           <NavButton icon={<LayoutDashboard />} label="Hoje" active={activeTab === 'hoje'} onClick={() => setActiveTab('hoje')} />
           <NavButton icon={<Dumbbell />} label="Treinos" active={activeTab === 'treinos'} onClick={() => setActiveTab('treinos')} />
-          <NavButton icon={<Trophy />} label="Geral" active={activeTab === 'ranking'} onClick={() => setActiveTab('ranking')} />
-          <NavButton icon={<Users />} label="Grupos" active={activeTab === 'grupos'} onClick={() => setActiveTab('grupos')} />
+          <NavButton icon={<Trophy />} label="Ranking" active={activeTab === 'ranking'} onClick={() => setActiveTab('ranking')} />
           <NavButton icon={<TrendingUp />} label="Evolução" active={activeTab === 'progresso'} onClick={() => setActiveTab('progresso')} />
+          <NavButton icon={<Activity />} label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
         </div>
       </nav>
 
@@ -1199,7 +1186,6 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
   const [elapsed, setElapsed] = useState(isEditing ? (session.duration || 0) : 0);
   const [restTime, setRestTime] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false);
 
   useEffect(() => {
@@ -1300,10 +1286,7 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
     setCurrentSession(newSession);
   };
 
-  const finishWorkout = async () => {
-    if (isSaving) return;
-    setIsSaving(true);
-    
+  const finishWorkout = () => {
     const totalVol = currentSession.exercises.reduce((acc, ex) => {
       const detail = exerciseDetails[ex.exerciseId];
       return acc + ex.sets.reduce((sAcc, s) => {
@@ -1315,24 +1298,18 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
       }, 0);
     }, 0);
     
-    try {
-      // Sync to Cloud
-      if (!isEditing) {
-        await updateUserStats(auth.currentUser?.uid || '', totalVol);
-      }
-
-      onSave({
-        ...currentSession,
-        totalVolume: totalVol,
-        duration: elapsed,
-        isCompleted: true,
-        date: isEditing ? currentSession.date : Date.now()
-      });
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar treino. Tente novamente.");
-      setIsSaving(false);
+    // Sync to Cloud
+    if (!isEditing) {
+      updateUserStats(auth.currentUser?.uid || '', totalVol);
     }
+
+    onSave({
+      ...currentSession,
+      totalVolume: totalVol,
+      duration: elapsed,
+      isCompleted: true,
+      date: isEditing ? currentSession.date : Date.now()
+    });
   };
 
   const handleFinishRequest = () => {
@@ -1530,10 +1507,8 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
                    <p className="text-gray-400 text-sm font-medium">Treino concluído com sucesso. Deseja registrar a sessão?</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                   <Button variant="secondary" onClick={() => setIsFinishing(false)} disabled={isSaving}>Ainda não</Button>
-                   <Button variant="primary" onClick={finishWorkout} disabled={isSaving}>
-                      {isSaving ? <Dumbbell className="animate-spin" size={18} /> : 'Registrar!'}
-                   </Button>
+                   <Button variant="secondary" onClick={() => setIsFinishing(false)}>Ainda não</Button>
+                   <Button variant="primary" onClick={finishWorkout}>Registrar!</Button>
                 </div>
              </Card>
           </motion.div>
@@ -1575,7 +1550,7 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
 
 // --- View: Settings ---
 
-function SettingsView({ onBack, onLogout, user }: { onBack: () => void, onLogout: () => void, user: any }) {
+function SettingsView({ onBack, onLogout }: { onBack: () => void, onLogout: () => void }) {
   const [defaultRest, setDefaultRest] = useState(60);
   const [weeklyGoal, setWeeklyGoal] = useState(5);
   const [displayName, setDisplayName] = useState(auth.currentUser?.displayName || '');
@@ -1725,57 +1700,6 @@ function SettingsView({ onBack, onLogout, user }: { onBack: () => void, onLogout
           <Button variant="danger" className="w-full flex gap-2 h-14" onClick={onLogout}>
             <X className="w-5 h-5" /> Sair da Conta
           </Button>
-
-          {user.email?.toLowerCase() === 'gamml1996@gmail.com' && (
-            <div className="space-y-2">
-              <Button 
-                 type="button"
-                 variant="secondary" 
-                 className="w-full h-12 text-[10px] font-bold uppercase tracking-widest bg-yellow-600"
-                 onClick={async () => {
-                    console.log("Iniciando limpeza sem confirmação (sandbox restrito)...");
-                    try {
-                        const usersSnap = await getDocs(collection(db, 'users'));
-                        const batch = writeBatch(db);
-                        console.log("Número de usuários para resetar:", usersSnap.docs.length);
-                        usersSnap.docs.forEach((u) => {
-                            batch.update(u.ref, { totalVolume: 0, totalWorkouts: 0, streak: 0 });
-                        });
-                        await batch.commit();
-                        console.log("Batch commitado com sucesso");
-                        alert("Ranking global limpo!");
-                        window.location.reload();
-                    } catch (e) { alert("Erro ao limpar ranking: " + e); console.error(e); }
-                 }}
-              >
-                Limpar Ranking Global
-              </Button>
-              <Button 
-                  type="button"
-                  variant="danger" 
-                  className="w-full h-12 text-[10px] font-bold uppercase tracking-widest bg-red-800"
-                  onClick={async () => {
-                      console.log("Iniciando exclusão sem confirmação (sandbox restrito)...");
-                      try {
-                          const usersSnap = await getDocs(collection(db, 'users'));
-                          for (const userDoc of usersSnap.docs) {
-                            const sessionsRef = collection(db, 'users', userDoc.id, 'sessions');
-                            const sessionsSnap = await getDocs(sessionsRef);
-                            const batch = writeBatch(db);
-                            sessionsSnap.docs.forEach(doc => {
-                              batch.delete(doc.ref);
-                            });
-                            await batch.commit();
-                          }
-                          alert("Treinos apagados!");
-                          window.location.reload();
-                        } catch (e) { alert("Erro ao apagar treinos: " + e); console.error(e); }
-                  }}
-              >
-                  Excluir Todos os Treinos
-              </Button>
-            </div>
-          )}
 
           <Button 
             variant="ghost" 
@@ -1956,376 +1880,121 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
   );
 }
 
-// --- View: Grupos (Social Competition) ---
-
-function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
-  const [groups, setGroups] = useState<Group[]>([]);
-  const [activeGroup, setActiveGroup] = useState<Group | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [showJoin, setShowJoin] = useState(false);
-  const [groupName, setGroupName] = useState('');
-  const [competitionType, setCompetitionType] = useState<'volume' | 'strikes' | 'both'>('volume');
-  const [inviteCode, setInviteCode] = useState('');
-  const [loading, setLoading] = useState(true);
+function StatsView() {
+  const [sessions, setSessions] = useState<WorkoutSession[]>([]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
 
   useEffect(() => {
-    // Listen to groups where user is a member
-    const q = query(
-      collection(db, 'groups'), 
-      where('memberIds', 'array-contains', currentUser.uid),
-      orderBy('createdAt', 'desc')
-    );
-    
-    const unsub = onSnapshot(q, (snap) => {
-      setGroups(snap.docs.map(d => d.data() as Group));
-      setLoading(false);
-    }, (err) => {
-      console.error("Grupos listener error:", err);
-      setLoading(false);
+    const unsubSessions = onSnapshot(query(getCollectionRef('sessions'), orderBy('date')), (snap) => {
+      setSessions(snap.docs.map(d => d.data() as WorkoutSession));
     });
 
-    return () => unsub();
-  }, [currentUser.uid]);
-
-  const createGroup = async () => {
-    if (!groupName.trim()) return;
-    const gId = crypto.randomUUID();
-    const newGroup: Group = {
-      id: gId,
-      name: groupName.trim(),
-      competitionType,
-      inviteCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
-      creatorId: currentUser.uid,
-      memberIds: [currentUser.uid],
-      createdAt: Date.now()
-    };
-    try {
-      await setDoc(doc(db, 'groups', gId), newGroup);
-      setGroupName('');
-      setShowCreate(false);
-      setActiveGroup(newGroup);
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao criar grupo.");
+    async function loadExercises() {
+      const snap = await getDocs(getCollectionRef('exercises'));
+      const custom = snap.docs.map(d => d.data() as Exercise);
+      setExercises([...DEFAULT_EXERCISES, ...custom]);
     }
-  };
+    
+    loadExercises();
+    return () => unsubSessions();
+  }, []);
 
-  const joinGroup = async () => {
-    if (!inviteCode.trim()) return;
-    try {
-      const q = query(collection(db, 'groups'), where('inviteCode', '==', inviteCode.trim().toUpperCase()));
-      const snap = await getDocs(q);
-      if (snap.empty) {
-        alert("Código inválido ou grupo não encontrado!");
-        return;
+  const dataLines = sessions.map(s => ({
+    date: format(s.date, 'dd/MM'),
+    volume: s.totalVolume
+  })).slice(-10);
+
+  // Calculate Muscle Distribution
+  const muscleCount: Record<string, number> = {};
+  let totalSets = 0;
+
+  // Filter sessions from last 30 days for distribution
+  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const recentSessions = sessions.filter(s => s.date >= thirtyDaysAgo);
+
+  recentSessions.forEach(s => {
+    s.exercises.forEach(exLog => {
+      const exDetail = exercises.find(e => e.id === exLog.exerciseId);
+      if (exDetail) {
+        const completedSets = exLog.sets.filter(st => st.completed).length;
+        muscleCount[exDetail.muscleGroup] = (muscleCount[exDetail.muscleGroup] || 0) + completedSets;
+        totalSets += completedSets;
       }
-      const groupDoc = snap.docs[0];
-      const group = groupDoc.data() as Group;
-      
-      if (group.memberIds.includes(currentUser.uid)) {
-        alert("Você já faz parte deste grupo!");
-        setActiveGroup(group);
-        setShowJoin(false);
-        return;
-      }
+    });
+  });
 
-      await updateDoc(doc(db, 'groups', group.id), {
-        memberIds: arrayUnion(currentUser.uid)
-      });
-      
-      setInviteCode('');
-      setShowJoin(false);
-      setActiveGroup({ ...group, memberIds: [...group.memberIds, currentUser.uid] });
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao entrar no grupo.");
-    }
-  };
-
-  if (activeGroup) {
-     return <GroupDetailsView group={activeGroup} onBack={() => setActiveGroup(null)} currentUser={currentUser} />;
-  }
+  const muscleStats = Object.entries(muscleCount)
+    .map(([m, count]) => ({
+      m,
+      p: totalSets > 0 ? Math.round((count / totalSets) * 100) : 0
+    }))
+    .sort((a, b) => b.p - a.p);
 
   return (
     <motion.div 
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -20 }}
-      className="py-4 space-y-8"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="py-4 space-y-6"
     >
-      <header className="flex justify-between items-end">
-        <div>
-          <h1 className="text-3xl italic font-black uppercase tracking-tighter leading-tight">Meus <span className="text-brand-secondary">Grupos</span></h1>
-          <p className="text-[10px] uppercase font-bold text-gray-500 tracking-widest mt-1">Competição Privada</p>
-        </div>
-        <div className="flex gap-2">
-           <Button variant="ghost" size="icon" onClick={() => setShowJoin(true)} className="w-10 h-10 border border-white/5"><UserPlus size={18} /></Button>
-           <Button variant="primary" size="icon" onClick={() => setShowCreate(true)} className="w-10 h-10"><Plus size={18} /></Button>
-        </div>
+      <header>
+        <h1 className="text-3xl italic">Estatísticas</h1>
+        <p className="text-gray-500 text-sm italic uppercase tracking-widest font-bold">Resumo Geral</p>
       </header>
 
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
-        </div>
-      ) : groups.length > 0 ? (
-        <div className="grid gap-4">
-           {groups.map(g => (
-             <Card 
-               key={g.id} 
-               onClick={() => setActiveGroup(g)}
-               className="group relative overflow-hidden transition-all hover:border-brand-primary/40 active:scale-[0.98] cursor-pointer"
-             >
-                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                   <Users size={60} />
-                </div>
-                <h3 className="text-xl font-black italic mb-2 uppercase">{g.name}</h3>
-                <div className="flex items-center gap-2 mb-3">
-                   <Badge variant="secondary" className="px-1.5 py-0.5 text-[8px] leading-none h-auto">
-                      {g.competitionType === 'volume' ? 'Carga Total' : g.competitionType === 'strikes' ? 'Frequência' : 'Híbrido'}
-                   </Badge>
-                </div>
-                <div className="flex items-center gap-3">
-                   <div className="flex -space-x-2">
-                      {g.memberIds.slice(0, 4).map((_, i) => (
-                        <div key={i} className="w-6 h-6 rounded-full bg-white/10 border border-bg-base flex items-center justify-center text-[8px] font-black italic text-brand-primary">
-                          {i === 3 ? `+${g.memberIds.length - 3}` : 'U'}
-                        </div>
-                      ))}
-                   </div>
-                   <span className="text-[10px] text-muted uppercase font-bold tracking-widest">{g.memberIds.length} membros</span>
-                </div>
-             </Card>
-           ))}
-        </div>
-      ) : (
-        <div className="text-center py-20 space-y-6">
-           <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto text-gray-700">
-              <Users size={40} />
-           </div>
-           <div className="space-y-2">
-              <h3 className="text-lg font-black italic uppercase">Treinar em grupo é melhor.</h3>
-              <p className="text-gray-500 text-sm px-8 leading-relaxed">Crie um grupo privado e convide seus amigos para comparar treinos e motivar uns aos outros.</p>
-           </div>
-           <div className="flex flex-col gap-3 px-6">
-              <Button onClick={() => setShowCreate(true)}>Criar Grupo</Button>
-              <Button variant="secondary" onClick={() => setShowJoin(true)}>Entrar com Código</Button>
-           </div>
-        </div>
-      )}
+      <div className="grid grid-cols-2 gap-4">
+        <Card className="flex flex-col items-center">
+           <p className="text-[10px] text-gray-500 uppercase font-black mb-1">Total Treinos</p>
+           <span className="text-3xl font-display leading-none">{sessions.length}</span>
+        </Card>
+        <Card className="flex flex-col items-center">
+           <p className="text-[10px] text-gray-500 uppercase font-black mb-1">Carga Total (KG)</p>
+           <span className="text-3xl font-display leading-none text-brand-primary">{Math.round(sessions.reduce((a,b) => a + b.totalVolume, 0) / 1000)}k</span>
+        </Card>
+      </div>
 
-      {/* MODALS */}
-      <AnimatePresence>
-        {showCreate && (
-           <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-sm">
-              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm">
-                 <Card className="space-y-6">
-                    <div className="flex justify-between items-center">
-                       <h2 className="text-xl font-black italic uppercase">Novo Grupo</h2>
-                       <button onClick={() => setShowCreate(false)} className="text-gray-500 hover:text-white"><X /></button>
-                    </div>
-                    <div>
-                       <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Nome do Grupo</label>
-                       <input 
-                         autoFocus
-                         value={groupName}
-                         onChange={(e) => setGroupName(e.target.value)}
-                         className="w-full bg-white/5 border border-white/10 h-14 px-4 rounded-xl outline-none focus:border-brand-primary text-white font-display text-lg mb-4"
-                         placeholder="Ex: Monstros da City"
-                       />
+      <section className="space-y-3">
+         <h2 className="text-lg italic">Volume por Sessão</h2>
+         <Card className="h-64 pt-6 text-[10px]">
+            {dataLines.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={dataLines}>
+                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                   <XAxis dataKey="date" stroke="#4a4a4a" tick={{ fill: '#8E8E93' }} />
+                   <YAxis stroke="#4a4a4a" tick={{ fill: '#8E8E93' }} />
+                   <Tooltip 
+                     contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
+                     cursor={{ fill: 'rgba(255,94,26,0.1)' }}
+                   />
+                   <Bar dataKey="volume" fill="#FF5E1A" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-full text-muted italic">Aguardando dados...</div>
+            )}
+         </Card>
+      </section>
 
-                       <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Tipo de Competição</label>
-                       <div className="grid grid-cols-3 gap-2 mb-4">
-                          {[
-                            { id: 'volume', label: 'Volume', icon: <Weight size={18} /> },
-                            { id: 'strikes', label: 'Strikes', icon: <Flame size={18} /> },
-                            { id: 'both', label: 'Ambos', icon: <Trophy size={18} /> }
-                          ].map(t => (
-                            <button
-                              key={t.id}
-                              type="button"
-                              onClick={() => setCompetitionType(t.id as any)}
-                              className={`flex flex-col items-center justify-center gap-2 p-4 rounded-2xl border transition-all ${competitionType === t.id ? 'bg-brand-primary/10 border-brand-primary text-brand-primary shadow-[0_0_15px_rgba(255,94,26,0.2)]' : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10'}`}
-                            >
-                               {t.icon}
-                               <span className="text-[9px] font-black uppercase tracking-tighter">{t.label}</span>
-                            </button>
-                          ))}
-                       </div>
-                    </div>
-                    <Button onClick={createGroup} className="w-full">Criar Grupo</Button>
-                 </Card>
-              </motion.div>
-           </div>
-        )}
-
-        {showJoin && (
-           <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-sm">
-              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm">
-                 <Card className="space-y-6">
-                    <div className="flex justify-between items-center">
-                       <h2 className="text-xl font-black italic uppercase">Entrar no Grupo</h2>
-                       <button onClick={() => setShowJoin(false)} className="text-gray-500 hover:text-white"><X /></button>
-                    </div>
-                    <div>
-                       <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Código de Convite</label>
-                       <input 
-                         autoFocus
-                         value={inviteCode}
-                         onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                         className="w-full bg-white/5 border border-white/10 h-14 px-4 rounded-xl outline-none focus:border-brand-primary text-white font-display text-2xl text-center tracking-[0.5em]"
-                         placeholder="XXXXXX"
-                         maxLength={6}
-                       />
-                    </div>
-                    <Button onClick={joinGroup} className="w-full">Entrar Agora</Button>
-                 </Card>
-              </motion.div>
-           </div>
-        )}
-      </AnimatePresence>
-    </motion.div>
-  );
-}
-
-function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack: () => void, currentUser: FirebaseUser }) {
-  const [members, setMembers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    // Fetch user profiles for all members
-    const q = query(collection(db, 'users'), where('uid', 'in', group.memberIds));
-    const unsub = onSnapshot(q, (snap) => {
-      const data = snap.docs.map(d => d.data());
-      // Sort based on competition type
-      data.sort((a, b) => {
-        if (group.competitionType === 'strikes') {
-          return (b.totalWorkouts || 0) - (a.totalWorkouts || 0);
-        } else if (group.competitionType === 'volume') {
-          return (b.totalVolume || 0) - (a.totalVolume || 0);
-        } else {
-          // Both: Mix of workouts and volume for hybrid score
-          const scoreA = (a.totalWorkouts || 0) * 1000 + (a.totalVolume || 0) / 1000;
-          const scoreB = (b.totalWorkouts || 0) * 1000 + (b.totalVolume || 0) / 1000;
-          return scoreB - scoreA;
-        }
-      });
-      setMembers(data);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, [group.memberIds]);
-
-  const leaveGroup = async () => {
-    if (!confirm("Tem certeza que deseja sair do grupo?")) return;
-    setLoading(true);
-    try {
-      const batch = writeBatch(db);
-      const groupRef = doc(db, 'groups', group.id);
-      
-      // Atomicly remove from group memberIds
-      batch.update(groupRef, {
-        memberIds: arrayRemove(currentUser.uid)
-      });
-      
-      await batch.commit();
-      onBack();
-    } catch (err) {
-      console.error("Error leaving group:", err);
-      alert("Erro ao sair do grupo. Verifique sua conexão.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const copyInvite = () => {
-    navigator.clipboard.writeText(group.inviteCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="py-4 space-y-6">
-      <header className="space-y-4">
-        <div className="flex justify-between items-center">
-           <Button variant="ghost" size="icon" onClick={onBack} className="w-10 h-10"><ChevronLeft /></Button>
-           <div className="flex gap-2">
-              <button 
-                onClick={copyInvite}
-                className={`h-10 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${copied ? 'bg-green-500 text-black' : 'bg-white/5 text-muted border border-white/10 hover:bg-white/10'}`}
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                <span className="font-mono">{copied ? 'Copiado!' : group.inviteCode}</span>
-              </button>
-              <Button variant="danger" size="icon" onClick={leaveGroup} className="w-10 h-10 border-none bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-black">
-                <LogOut size={18} />
-              </Button>
-           </div>
-        </div>
-        <div>
-           <h1 className="text-3xl font-black italic uppercase leading-none">{group.name}</h1>
-           <p className="text-[10px] text-muted font-bold uppercase tracking-[0.2em] mt-2">
-              Leaderboard: {group.competitionType === 'strikes' ? 'Frequência (Strikes)' : group.competitionType === 'volume' ? 'Carga Total (Volume)' : 'Competição Híbrida'}
-           </p>
-        </div>
-      </header>
-
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
-        </div>
-      ) : (
-        <div className="space-y-3">
-           {members.map((member, idx) => (
-             <Card 
-               key={member.uid} 
-               className={`flex items-center gap-4 transition-all ${member.uid === currentUser.uid ? 'border-brand-primary bg-brand-primary/5 shadow-[0_0_20px_rgba(255,94,26,0.05)]' : 'border-white/5 opacity-80'}`}
-             >
-                <div className="w-6 text-center font-black italic text-gray-700">
-                   #{idx + 1}
-                </div>
-                <img 
-                  src={member.photoURL || `https://picsum.photos/seed/${member.uid}/100/100`} 
-                  alt="" 
-                  className={`w-10 h-10 rounded-xl border ${member.uid === currentUser.uid ? 'border-brand-primary' : 'border-white/10'}`} 
-                  referrerPolicy="no-referrer"
-                />
-                <div className="flex-1 min-w-0">
-                   <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-sm truncate uppercase tracking-tight">{member.displayName}</h4>
-                      {member.uid === group.creatorId && <div className="p-0.5" title="Criador do Grupo"><Trophy size={10} className="text-yellow-500" /></div>}
-                   </div>
-                   <div className="flex items-center gap-2">
-                      <p className={`text-[9px] uppercase font-bold tracking-widest ${group.competitionType === 'strikes' ? 'text-brand-primary' : 'text-gray-500'}`}>
-                         {member.totalWorkouts || 0} treinos
-                      </p>
-                      <div className="w-1 h-1 bg-white/10 rounded-full" />
-                      <p className={`text-[9px] uppercase font-bold tracking-widest ${group.competitionType === 'volume' ? 'text-brand-primary' : 'text-gray-500'}`}>
-                         {Math.round((member.totalVolume || 0) / 1000)}k KG
-                      </p>
-                   </div>
-                </div>
-                <div className="text-right">
-                   <div className="flex flex-col items-end">
-                      {group.competitionType === 'strikes' ? (
-                        <div className="flex flex-col items-end">
-                           <Trophy size={14} className="text-brand-primary" />
-                           <p className="text-[10px] text-white font-black uppercase tracking-tighter mt-1">{member.totalWorkouts || 0}</p>
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-end">
-                           <Flame size={14} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
-                           <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter mt-1">{member.streak || 0}d</p>
-                        </div>
-                      )}
-                   </div>
-                </div>
-             </Card>
-           ))}
-        </div>
-      )}
+      <section className="space-y-3">
+         <div className="flex items-center justify-between">
+            <h2 className="text-lg italic">Músculos Ativos</h2>
+            <Badge variant="secondary">Últimos 30 Dias</Badge>
+         </div>
+         <div className="grid grid-cols-2 gap-2">
+            {muscleStats.length > 0 ? muscleStats.map(item => (
+              <div key={item.m} className="bg-bg-card p-4 rounded-2xl flex flex-col gap-2 border border-white/5">
+                 <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-gray-500">
+                    <span>{item.m}</span>
+                    <span>{item.p}%</span>
+                 </div>
+                 <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                    <div className="h-full bg-brand-primary rounded-full transition-all duration-1000" style={{ width: `${item.p}%` }} />
+                 </div>
+              </div>
+            )) : (
+              <p className="col-span-2 text-center text-muted italic text-sm py-4">Inicie um treino para ver a distribuição.</p>
+            )}
+         </div>
+      </section>
     </motion.div>
   );
 }
