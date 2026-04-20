@@ -34,7 +34,6 @@ import { ptBR } from 'date-fns/locale';
 import { 
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
-import confetti from 'canvas-confetti';
 import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
 
 import { 
@@ -252,12 +251,6 @@ export default function App() {
              if (user) await updatePersonalRecords(user.uid, w);
              setActiveWorkout(null);
              setRefreshKey(k => k + 1);
-             confetti({
-               particleCount: 150,
-               spread: 70,
-               origin: { y: 0.6 },
-               colors: ['#FF5E1A', '#39FF14', '#ffffff']
-             });
           }}
         />
       )}
@@ -559,13 +552,6 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
        batch.update(getDocRef('plans', reordered[i].id), { order: i });
     }
     await batch.commit();
-    
-    confetti({
-      particleCount: 40,
-      spread: 20,
-      origin: { y: 0.8 },
-      colors: ['#8E8E93']
-    });
   };
 
   const startEmptyWorkout = (plan: WorkoutPlan) => {
@@ -579,6 +565,7 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
         exerciseName: '', // Will be resolved
         restTimer: ex.restTimer,
         targetReps: ex.targetReps,
+        targetDuration: ex.targetDuration,
         isVariationPerSet: ex.isVariationPerSet,
         sets: Array.from({ length: ex.targetSets }).map(() => ({
           weight: 0,
@@ -654,32 +641,42 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
         </div>
         
         {plans.length > 0 ? (
-          <Card onClick={() => startEmptyWorkout(plans[0])} borderAccent className="relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-4 opacity-5 group-active:opacity-10 transition-opacity">
-               <Dumbbell size={100} />
-            </div>
-            <h3 className="text-3xl italic font-black mb-1">{plans[0].name}</h3>
-            <div className="flex items-center gap-2 mb-6">
-              <span className="text-muted text-xs font-bold uppercase tracking-wider">{plans[0].exercises.length} Exercícios</span>
-              <div className="w-1 h-1 bg-muted/40 rounded-full" />
-              <span className="text-muted text-xs font-bold uppercase tracking-wider">~45 min</span>
-            </div>
-            <div className="flex items-center text-brand-primary text-sm font-black gap-2 uppercase tracking-tight">
-              Começar Agora <ArrowRight size={18} />
-            </div>
-            
-            {plans.length > 1 && (
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  skipWorkout(plans[0]);
-                }}
-                className="absolute top-4 right-4 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white py-1 px-3 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10 transition-all z-10"
-              >
-                Pular Treino
-              </button>
-            )}
-          </Card>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={plans[0].id}
+              initial={{ x: 0, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Card onClick={() => startEmptyWorkout(plans[0])} borderAccent className="relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-active:opacity-10 transition-opacity">
+                   <Dumbbell size={100} />
+                </div>
+                <h3 className="text-3xl italic font-black mb-1">{plans[0].name}</h3>
+                <div className="flex items-center gap-2 mb-6">
+                  <span className="text-muted text-xs font-bold uppercase tracking-wider">{plans[0].exercises.length} Exercícios</span>
+                  <div className="w-1 h-1 bg-muted/40 rounded-full" />
+                  <span className="text-muted text-xs font-bold uppercase tracking-wider">~45 min</span>
+                </div>
+                <div className="flex items-center text-brand-primary text-sm font-black gap-2 uppercase tracking-tight">
+                  Começar Agora <ArrowRight size={18} />
+                </div>
+                
+                {plans.length > 1 && (
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      skipWorkout(plans[0]);
+                    }}
+                    className="absolute top-4 right-4 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white py-1 px-3 rounded-full text-[10px] font-black uppercase tracking-widest border border-white/10 transition-all z-10"
+                  >
+                    Pular Treino
+                  </button>
+                )}
+              </Card>
+            </motion.div>
+          </AnimatePresence>
         ) : (
           <Card className="text-center py-8 flex flex-col items-center">
             <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4 text-gray-400">
@@ -936,36 +933,55 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
                         </div>
                         
                         <div className="flex items-center gap-1">
-                          <input 
-                            type="text"
-                            value={ex.targetReps}
-                            onChange={(e) => {
-                              const newExs = [...editedPlan.exercises];
-                              newExs[idx].targetReps = e.target.value;
-                              setEditedPlan({...editedPlan, exercises: newExs});
-                            }}
-                            className="w-16 h-8 bg-white/5 border border-white/10 rounded text-center text-xs text-white"
-                            placeholder={ex.isVariationPerSet ? "12,10,8" : "10-12"}
-                          />
-                          <button 
-                            onClick={() => {
-                              const newExs = [...editedPlan.exercises];
-                              newExs[idx].isVariationPerSet = !newExs[idx].isVariationPerSet;
-                              setEditedPlan({...editedPlan, exercises: newExs});
-                            }}
-                            className={`p-1.5 rounded-lg transition-colors flex items-center justify-center ${ex.isVariationPerSet ? 'bg-brand-primary text-black' : 'bg-white/5 text-gray-500 hover:text-white'}`}
-                            title={ex.isVariationPerSet ? "Séries variadas ativas" : "Ativar séries variadas"}
-                          >
-                            <Activity size={12} />
-                          </button>
-                          
-                          {ex.isVariationPerSet && (
-                            <div className="group relative">
-                              <Info size={12} className="text-brand-primary/60 cursor-help" />
-                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-black border border-white/10 p-2 rounded-lg text-[8px] leading-tight text-gray-400 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity pointer-events-none z-50">
-                                Use vírgulas para separar as repetições de cada série. Ex: <span className="text-brand-primary">12, 10, 8</span>
-                              </div>
+                          {baseInfo?.muscleGroup === 'Cardio' ? (
+                            <div className="flex items-center gap-1">
+                              <input 
+                                type="number"
+                                value={ex.targetDuration ? Math.floor(ex.targetDuration / 60) : ''}
+                                onChange={(e) => {
+                                  const newExs = [...editedPlan.exercises];
+                                  newExs[idx].targetDuration = (parseInt(e.target.value) || 0) * 60;
+                                  setEditedPlan({...editedPlan, exercises: newExs});
+                                }}
+                                className="w-14 h-8 bg-white/5 border border-white/10 rounded text-center text-xs text-white"
+                                placeholder="min"
+                              />
+                              <span className="text-[9px] uppercase font-bold text-gray-500">min</span>
                             </div>
+                          ) : (
+                            <>
+                              <input 
+                                type="text"
+                                value={ex.targetReps}
+                                onChange={(e) => {
+                                  const newExs = [...editedPlan.exercises];
+                                  newExs[idx].targetReps = e.target.value;
+                                  setEditedPlan({...editedPlan, exercises: newExs});
+                                }}
+                                className="w-16 h-8 bg-white/5 border border-white/10 rounded text-center text-xs text-white"
+                                placeholder={ex.isVariationPerSet ? "12,10,8" : "10-12"}
+                              />
+                              <button 
+                                onClick={() => {
+                                  const newExs = [...editedPlan.exercises];
+                                  newExs[idx].isVariationPerSet = !newExs[idx].isVariationPerSet;
+                                  setEditedPlan({...editedPlan, exercises: newExs});
+                                }}
+                                className={`p-1.5 rounded-lg transition-colors flex items-center justify-center ${ex.isVariationPerSet ? 'bg-brand-primary text-black' : 'bg-white/5 text-gray-500 hover:text-white'}`}
+                                title={ex.isVariationPerSet ? "Séries variadas ativas" : "Ativar séries variadas"}
+                              >
+                                <Activity size={12} />
+                              </button>
+                              
+                              {ex.isVariationPerSet && (
+                                <div className="group relative">
+                                  <Info size={12} className="text-brand-primary/60 cursor-help" />
+                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-black border border-white/10 p-2 rounded-lg text-[8px] leading-tight text-gray-400 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity pointer-events-none z-50">
+                                    Use vírgulas para separar as repetições de cada série. Ex: <span className="text-brand-primary">12, 10, 8</span>
+                                  </div>
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                         {ex.isVariationPerSet && (
@@ -1202,7 +1218,7 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
     setCurrentSession(newSession);
   };
 
-  const updateSet = (exIdx: number, setIdx: number, field: 'weight' | 'reps', value: number) => {
+  const updateSet = (exIdx: number, setIdx: number, field: 'weight' | 'reps' | 'duration', value: number) => {
     const newSession = { ...currentSession };
     newSession.exercises[exIdx].sets[setIdx][field] = value;
     setCurrentSession(newSession);
@@ -1210,7 +1226,14 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
 
   const finishWorkout = () => {
     const totalVol = currentSession.exercises.reduce((acc, ex) => {
-      return acc + ex.sets.reduce((sAcc, s) => s.completed ? sAcc + (s.weight * s.reps) : sAcc, 0);
+      const detail = exerciseDetails[ex.exerciseId];
+      return acc + ex.sets.reduce((sAcc, s) => {
+        if (!s.completed) return sAcc;
+        if (detail?.muscleGroup === 'Cardio') {
+          return sAcc + (s.weight * (s.duration ? s.duration / 60 : 0));
+        }
+        return sAcc + (s.weight * s.reps);
+      }, 0);
     }, 0);
     
     // Sync to Cloud
@@ -1298,7 +1321,7 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
                </div>
                
                <div className="flex gap-4 text-muted text-xs font-bold uppercase tracking-widest mb-6 px-1">
-                 <span>Meta: {ex.sets.length} SxR</span>
+                 <span>Meta: {ex.sets.length} {detail?.muscleGroup === 'Cardio' ? 'SxT' : 'SxR'}</span>
                  <div className="w-1 h-1 bg-muted/40 rounded-full mt-1.5" />
                  <span>{detail?.muscleGroup || 'Muscle'}</span>
                </div>
@@ -1309,7 +1332,12 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
                     <div className="flex flex-col gap-1">
                        <span className="uppercase font-black text-brand-primary tracking-widest">Última sessão:</span>
                        <span className="text-white font-medium text-xs">
-                          {previousData[ex.exerciseId]?.sets.map(s => `${s.weight}kg x ${s.reps}`).join(' | ')}
+                          {previousData[ex.exerciseId]?.sets.map(s => {
+                             if (detail?.muscleGroup === 'Cardio') {
+                               return `${s.weight}Lvl x ${s.duration ? Math.floor(s.duration / 60) : 0}min`;
+                             }
+                             return `${s.weight}kg x ${s.reps}`;
+                           }).join(' | ')}
                        </span>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
@@ -1325,12 +1353,15 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
                <div className="space-y-3">
                   <div className="grid grid-cols-[40px_1fr_1fr_50px] gap-3 px-3 text-[10px] font-black uppercase text-muted tracking-widest">
                     <div className="text-center">Set</div>
-                    <div className="text-center">Peso kg</div>
-                    <div className="text-center">Reps</div>
+                    <div className="text-center">{detail?.muscleGroup === 'Cardio' ? 'Nível/Vel' : 'Peso kg'}</div>
+                    <div className="text-center">{detail?.muscleGroup === 'Cardio' ? 'Tempo min' : 'Reps'}</div>
                     <div></div>
                   </div>
                   {ex.sets.map((set, setIdx) => {
                     const getPlaceholder = () => {
+                      if (detail?.muscleGroup === 'Cardio') {
+                        return ex.targetDuration ? String(Math.floor(ex.targetDuration / 60)) : '--';
+                      }
                       if (ex.isVariationPerSet && ex.targetReps) {
                         const parts = ex.targetReps.split(',').map(p => p.trim());
                         return parts[setIdx] || parts[parts.length - 1] || '--';
@@ -1357,9 +1388,15 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
                          <div className="flex flex-col">
                            <input 
                              type="number"
-                             inputMode="numeric"
-                             value={set.reps || ''}
-                             onChange={(e) => updateSet(exIdx, setIdx, 'reps', parseInt(e.target.value))}
+                             inputMode={detail?.muscleGroup === 'Cardio' ? 'decimal' : 'numeric'}
+                             value={detail?.muscleGroup === 'Cardio' ? (set.duration ? set.duration / 60 : '') : (set.reps || '')}
+                             onChange={(e) => {
+                               if (detail?.muscleGroup === 'Cardio') {
+                                 updateSet(exIdx, setIdx, 'duration', (parseFloat(e.target.value) || 0) * 60);
+                               } else {
+                                 updateSet(exIdx, setIdx, 'reps', parseInt(e.target.value) || 0);
+                               }
+                             }}
                              className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0"
                              placeholder={getPlaceholder()}
                            />
@@ -1395,17 +1432,17 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
           >
              <Card className="w-full max-w-sm space-y-6 text-center border-brand-primary/20">
                 <motion.div 
-                  initial={{ scale: 0.5, rotate: -20 }}
-                  animate={{ scale: 1, rotate: 0 }}
+                  initial={{ scale: 0.5 }}
+                  animate={{ scale: 1 }}
                   className="flex justify-center"
                 >
-                   <div className="w-20 h-20 bg-brand-primary/20 rounded-full flex items-center justify-center text-brand-primary shadow-[0_0_30px_rgba(255,94,26,0.3)]">
-                      <Trophy size={40} className="animate-bounce" />
+                   <div className="w-20 h-20 bg-brand-secondary/20 rounded-full flex items-center justify-center text-brand-secondary">
+                      <CheckCircle2 size={40} />
                    </div>
                 </motion.div>
                 <div>
-                   <h2 className="text-3xl italic font-black uppercase">Parabéns!</h2>
-                   <p className="text-gray-400 text-sm font-medium">Treino concluído com sucesso. Deseja registrar a sessão?</p>
+                   <h2 className="text-2xl italic font-black uppercase">Sessão Concluída</h2>
+                   <p className="text-gray-400 text-sm font-medium">Treino finalizado. Deseja registrar os dados desta sessão?</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                    <Button variant="secondary" onClick={() => setIsFinishing(false)}>Ainda não</Button>

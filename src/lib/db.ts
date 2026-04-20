@@ -9,6 +9,7 @@ export interface Exercise {
 export interface SetLog {
   weight: number;
   reps: number;
+  duration?: number; // in seconds, for cardio
   rpe?: number;
   completed: boolean;
   timestamp: number;
@@ -19,6 +20,7 @@ export interface ExerciseLog {
   exerciseName: string;
   restTimer: number; // copied from plan
   targetReps?: string; 
+  targetDuration?: number; // in seconds
   isVariationPerSet?: boolean;
   sets: SetLog[];
   notes?: string;
@@ -39,6 +41,7 @@ export interface WorkoutPlanExercise {
   exerciseId: string;
   targetSets: number;
   targetReps: string; // e.g., "8-12" or "12,10,8"
+  targetDuration?: number; // in seconds
   isVariationPerSet?: boolean;
   notes?: string;
   restTimer: number; // in seconds
@@ -102,4 +105,10 @@ export const DEFAULT_EXERCISES: Exercise[] = [
   { id: 'a1', name: 'Abdominal Supra', muscleGroup: 'Core' },
   { id: 'a2', name: 'Prancha Isométrica', muscleGroup: 'Core' },
   { id: 'a3', name: 'Elevação de Pernas', muscleGroup: 'Core' },
+  // Cardio
+  { id: 'cd1', name: 'Corrida na Esteira', muscleGroup: 'Cardio' },
+  { id: 'cd2', name: 'Bicicleta Ergométrica', muscleGroup: 'Cardio' },
+  { id: 'cd3', name: 'Elíptico', muscleGroup: 'Cardio' },
+  { id: 'cd4', name: 'Pular Corda', muscleGroup: 'Cardio' },
+  { id: 'cd5', name: 'Remo', muscleGroup: 'Cardio' },
 ];
