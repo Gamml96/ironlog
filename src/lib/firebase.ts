@@ -17,6 +17,8 @@ import {
   deleteDoc,
   writeBatch,
   where,
+  arrayUnion,
+  arrayRemove,
   writeBatch as firebaseWriteBatch
 } from 'firebase/firestore';
 import { DEFAULT_EXERCISES, Exercise, PersonalRecord, WorkoutSession } from './db';
@@ -36,7 +38,9 @@ export {
   getDocs,
   deleteDoc,
   writeBatch,
-  where
+  where,
+  arrayUnion,
+  arrayRemove
 };
 import firebaseConfig from '../../firebase-applet-config.json';
 

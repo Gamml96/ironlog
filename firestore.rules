@@ -27,6 +27,33 @@ service cloud.firestore {
              (!('yearly' in data) || data.yearly is map);
     }
 
+    function isValidGroup(data) {
+      return data.id is string &&
+             data.name is string && data.name.size() >= 2 && data.name.size() <= 40 &&
+             data.inviteCode is string && data.inviteCode.size() >= 4 &&
+             data.creatorId is string &&
+             data.memberIds is list &&
+             data.createdAt is number;
+    }
+
+    match /groups/{groupId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && 
+                      request.resource.data.creatorId == request.auth.uid &&
+                      isValidGroup(request.resource.data) &&
+                      request.auth.uid in request.resource.data.memberIds;
+      allow update: if isAuthenticated() && (
+        (resource.data.creatorId == request.auth.uid && isValidGroup(request.resource.data)) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds']) &&
+          request.resource.data.memberIds.size() == resource.data.memberIds.size() + 1 &&
+          request.auth.uid in request.resource.data.memberIds &&
+          request.resource.data.memberIds.hasAll(resource.data.memberIds)
+        )
+      );
+      allow delete: if isAuthenticated() && resource.data.creatorId == request.auth.uid;
+    }
+
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId) && request.resource.data.uid == request.auth.uid && isValidUser(request.resource.data);

@@ -26,7 +26,11 @@ import {
   Check,
   AlertTriangle,
   Activity,
-  Info
+  Info,
+  Users,
+  Copy,
+  LogOut,
+  UserPlus
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfWeek, endOfWeek, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
@@ -44,7 +48,9 @@ import {
   WorkoutPlanExercise,
   ExerciseLog,
   SetLog,
-  DEFAULT_EXERCISES
+  DEFAULT_EXERCISES,
+  Group,
+  GroupMemberStats
 } from './lib/db';
 import { 
   auth, 
@@ -67,7 +73,11 @@ import {
   where,
   logWeight,
   deleteSession,
-  updatePersonalRecords
+  updatePersonalRecords,
+  arrayUnion,
+  arrayRemove,
+  setDoc,
+  updateDoc
 } from './lib/firebase';
 import { PersonalRecord } from './lib/db';
 
@@ -145,7 +155,7 @@ const Badge = ({ children, variant = 'primary' }: { children: React.ReactNode, v
 // --- App Entry & Navigation ---
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'hoje' | 'treinos' | 'progresso' | 'exercicios' | 'stats' | 'config' | 'ranking'>('hoje');
+  const [activeTab, setActiveTab] = useState<'hoje' | 'treinos' | 'progresso' | 'exercicios' | 'grupos' | 'config' | 'ranking'>('hoje');
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
@@ -222,7 +232,7 @@ export default function App() {
           {activeTab === 'treinos' && <TreinosView />}
           {activeTab === 'progresso' && <ProgressoView />}
           {activeTab === 'exercicios' && <ExerciciosView />}
-          {activeTab === 'stats' && <StatsView />}
+          {activeTab === 'grupos' && <GruposView currentUser={user} />}
           {activeTab === 'ranking' && <RankingView currentUser={user} />}
           {activeTab === 'config' && <SettingsView onBack={() => setActiveTab('hoje')} onLogout={() => signOut(auth)} />}
         </AnimatePresence>
@@ -258,9 +268,9 @@ export default function App() {
         <div className="flex items-center justify-around h-20 max-w-md mx-auto px-2">
           <NavButton icon={<LayoutDashboard />} label="Hoje" active={activeTab === 'hoje'} onClick={() => setActiveTab('hoje')} />
           <NavButton icon={<Dumbbell />} label="Treinos" active={activeTab === 'treinos'} onClick={() => setActiveTab('treinos')} />
-          <NavButton icon={<Trophy />} label="Ranking" active={activeTab === 'ranking'} onClick={() => setActiveTab('ranking')} />
+          <NavButton icon={<Trophy />} label="Geral" active={activeTab === 'ranking'} onClick={() => setActiveTab('ranking')} />
+          <NavButton icon={<Users />} label="Grupos" active={activeTab === 'grupos'} onClick={() => setActiveTab('grupos')} />
           <NavButton icon={<TrendingUp />} label="Evolução" active={activeTab === 'progresso'} onClick={() => setActiveTab('progresso')} />
-          <NavButton icon={<Activity />} label="Stats" active={activeTab === 'stats'} onClick={() => setActiveTab('stats')} />
         </div>
       </nav>
 
@@ -1880,121 +1890,312 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
   );
 }
 
-function StatsView() {
-  const [sessions, setSessions] = useState<WorkoutSession[]>([]);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
+// --- View: Grupos (Social Competition) ---
+
+function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [activeGroup, setActiveGroup] = useState<Group | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [showJoin, setShowJoin] = useState(false);
+  const [groupName, setGroupName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubSessions = onSnapshot(query(getCollectionRef('sessions'), orderBy('date')), (snap) => {
-      setSessions(snap.docs.map(d => d.data() as WorkoutSession));
-    });
-
-    async function loadExercises() {
-      const snap = await getDocs(getCollectionRef('exercises'));
-      const custom = snap.docs.map(d => d.data() as Exercise);
-      setExercises([...DEFAULT_EXERCISES, ...custom]);
-    }
+    // Listen to groups where user is a member
+    const q = query(
+      collection(db, 'groups'), 
+      where('memberIds', 'array-contains', currentUser.uid),
+      orderBy('createdAt', 'desc')
+    );
     
-    loadExercises();
-    return () => unsubSessions();
-  }, []);
-
-  const dataLines = sessions.map(s => ({
-    date: format(s.date, 'dd/MM'),
-    volume: s.totalVolume
-  })).slice(-10);
-
-  // Calculate Muscle Distribution
-  const muscleCount: Record<string, number> = {};
-  let totalSets = 0;
-
-  // Filter sessions from last 30 days for distribution
-  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-  const recentSessions = sessions.filter(s => s.date >= thirtyDaysAgo);
-
-  recentSessions.forEach(s => {
-    s.exercises.forEach(exLog => {
-      const exDetail = exercises.find(e => e.id === exLog.exerciseId);
-      if (exDetail) {
-        const completedSets = exLog.sets.filter(st => st.completed).length;
-        muscleCount[exDetail.muscleGroup] = (muscleCount[exDetail.muscleGroup] || 0) + completedSets;
-        totalSets += completedSets;
-      }
+    const unsub = onSnapshot(q, (snap) => {
+      setGroups(snap.docs.map(d => d.data() as Group));
+      setLoading(false);
+    }, (err) => {
+      console.error("Grupos listener error:", err);
+      setLoading(false);
     });
-  });
 
-  const muscleStats = Object.entries(muscleCount)
-    .map(([m, count]) => ({
-      m,
-      p: totalSets > 0 ? Math.round((count / totalSets) * 100) : 0
-    }))
-    .sort((a, b) => b.p - a.p);
+    return () => unsub();
+  }, [currentUser.uid]);
+
+  const createGroup = async () => {
+    if (!groupName.trim()) return;
+    const gId = crypto.randomUUID();
+    const newGroup: Group = {
+      id: gId,
+      name: groupName.trim(),
+      inviteCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
+      creatorId: currentUser.uid,
+      memberIds: [currentUser.uid],
+      createdAt: Date.now()
+    };
+    try {
+      await setDoc(doc(db, 'groups', gId), newGroup);
+      setGroupName('');
+      setShowCreate(false);
+      setActiveGroup(newGroup);
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao criar grupo.");
+    }
+  };
+
+  const joinGroup = async () => {
+    if (!inviteCode.trim()) return;
+    try {
+      const q = query(collection(db, 'groups'), where('inviteCode', '==', inviteCode.trim().toUpperCase()));
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        alert("Código inválido ou grupo não encontrado!");
+        return;
+      }
+      const groupDoc = snap.docs[0];
+      const group = groupDoc.data() as Group;
+      
+      if (group.memberIds.includes(currentUser.uid)) {
+        alert("Você já faz parte deste grupo!");
+        setActiveGroup(group);
+        setShowJoin(false);
+        return;
+      }
+
+      await updateDoc(doc(db, 'groups', group.id), {
+        memberIds: arrayUnion(currentUser.uid)
+      });
+      
+      setInviteCode('');
+      setShowJoin(false);
+      setActiveGroup({ ...group, memberIds: [...group.memberIds, currentUser.uid] });
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao entrar no grupo.");
+    }
+  };
+
+  if (activeGroup) {
+     return <GroupDetailsView group={activeGroup} onBack={() => setActiveGroup(null)} currentUser={currentUser} />;
+  }
 
   return (
     <motion.div 
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="py-4 space-y-6"
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="py-4 space-y-8"
     >
-      <header>
-        <h1 className="text-3xl italic">Estatísticas</h1>
-        <p className="text-gray-500 text-sm italic uppercase tracking-widest font-bold">Resumo Geral</p>
+      <header className="flex justify-between items-end">
+        <div>
+          <h1 className="text-3xl italic font-black uppercase tracking-tighter leading-tight">Meus <span className="text-brand-secondary">Grupos</span></h1>
+          <p className="text-[10px] uppercase font-bold text-gray-500 tracking-widest mt-1">Competição Privada</p>
+        </div>
+        <div className="flex gap-2">
+           <Button variant="ghost" size="icon" onClick={() => setShowJoin(true)} className="w-10 h-10 border border-white/5"><UserPlus size={18} /></Button>
+           <Button variant="primary" size="icon" onClick={() => setShowCreate(true)} className="w-10 h-10"><Plus size={18} /></Button>
+        </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Card className="flex flex-col items-center">
-           <p className="text-[10px] text-gray-500 uppercase font-black mb-1">Total Treinos</p>
-           <span className="text-3xl font-display leading-none">{sessions.length}</span>
-        </Card>
-        <Card className="flex flex-col items-center">
-           <p className="text-[10px] text-gray-500 uppercase font-black mb-1">Carga Total (KG)</p>
-           <span className="text-3xl font-display leading-none text-brand-primary">{Math.round(sessions.reduce((a,b) => a + b.totalVolume, 0) / 1000)}k</span>
-        </Card>
-      </div>
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
+        </div>
+      ) : groups.length > 0 ? (
+        <div className="grid gap-4">
+           {groups.map(g => (
+             <Card 
+               key={g.id} 
+               onClick={() => setActiveGroup(g)}
+               className="group relative overflow-hidden transition-all hover:border-brand-primary/40 active:scale-[0.98] cursor-pointer"
+             >
+                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                   <Users size={60} />
+                </div>
+                <h3 className="text-xl font-black italic mb-2 uppercase">{g.name}</h3>
+                <div className="flex items-center gap-3">
+                   <div className="flex -space-x-2">
+                      {g.memberIds.slice(0, 4).map((_, i) => (
+                        <div key={i} className="w-6 h-6 rounded-full bg-white/10 border border-bg-base flex items-center justify-center text-[8px] font-black italic text-brand-primary">
+                          {i === 3 ? `+${g.memberIds.length - 3}` : 'U'}
+                        </div>
+                      ))}
+                   </div>
+                   <span className="text-[10px] text-muted uppercase font-bold tracking-widest">{g.memberIds.length} membros</span>
+                </div>
+             </Card>
+           ))}
+        </div>
+      ) : (
+        <div className="text-center py-20 space-y-6">
+           <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto text-gray-700">
+              <Users size={40} />
+           </div>
+           <div className="space-y-2">
+              <h3 className="text-lg font-black italic uppercase">Treinar em grupo é melhor.</h3>
+              <p className="text-gray-500 text-sm px-8 leading-relaxed">Crie um grupo privado e convide seus amigos para comparar treinos e motivar uns aos outros.</p>
+           </div>
+           <div className="flex flex-col gap-3 px-6">
+              <Button onClick={() => setShowCreate(true)}>Criar Grupo</Button>
+              <Button variant="secondary" onClick={() => setShowJoin(true)}>Entrar com Código</Button>
+           </div>
+        </div>
+      )}
 
-      <section className="space-y-3">
-         <h2 className="text-lg italic">Volume por Sessão</h2>
-         <Card className="h-64 pt-6 text-[10px]">
-            {dataLines.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={dataLines}>
-                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                   <XAxis dataKey="date" stroke="#4a4a4a" tick={{ fill: '#8E8E93' }} />
-                   <YAxis stroke="#4a4a4a" tick={{ fill: '#8E8E93' }} />
-                   <Tooltip 
-                     contentStyle={{ backgroundColor: '#1A1A1A', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px' }}
-                     cursor={{ fill: 'rgba(255,94,26,0.1)' }}
-                   />
-                   <Bar dataKey="volume" fill="#FF5E1A" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full text-muted italic">Aguardando dados...</div>
-            )}
-         </Card>
-      </section>
+      {/* MODALS */}
+      <AnimatePresence>
+        {showCreate && (
+           <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-sm">
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm">
+                 <Card className="space-y-6">
+                    <div className="flex justify-between items-center">
+                       <h2 className="text-xl font-black italic uppercase">Novo Grupo</h2>
+                       <button onClick={() => setShowCreate(false)} className="text-gray-500 hover:text-white"><X /></button>
+                    </div>
+                    <div>
+                       <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Nome do Grupo</label>
+                       <input 
+                         autoFocus
+                         value={groupName}
+                         onChange={(e) => setGroupName(e.target.value)}
+                         className="w-full bg-white/5 border border-white/10 h-14 px-4 rounded-xl outline-none focus:border-brand-primary text-white font-display text-lg"
+                         placeholder="Ex: Monstros da City"
+                       />
+                    </div>
+                    <Button onClick={createGroup} className="w-full">Criar Grupo</Button>
+                 </Card>
+              </motion.div>
+           </div>
+        )}
 
-      <section className="space-y-3">
-         <div className="flex items-center justify-between">
-            <h2 className="text-lg italic">Músculos Ativos</h2>
-            <Badge variant="secondary">Últimos 30 Dias</Badge>
-         </div>
-         <div className="grid grid-cols-2 gap-2">
-            {muscleStats.length > 0 ? muscleStats.map(item => (
-              <div key={item.m} className="bg-bg-card p-4 rounded-2xl flex flex-col gap-2 border border-white/5">
-                 <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-gray-500">
-                    <span>{item.m}</span>
-                    <span>{item.p}%</span>
-                 </div>
-                 <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-brand-primary rounded-full transition-all duration-1000" style={{ width: `${item.p}%` }} />
-                 </div>
-              </div>
-            )) : (
-              <p className="col-span-2 text-center text-muted italic text-sm py-4">Inicie um treino para ver a distribuição.</p>
-            )}
-         </div>
-      </section>
+        {showJoin && (
+           <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-sm">
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-full max-w-sm">
+                 <Card className="space-y-6">
+                    <div className="flex justify-between items-center">
+                       <h2 className="text-xl font-black italic uppercase">Entrar no Grupo</h2>
+                       <button onClick={() => setShowJoin(false)} className="text-gray-500 hover:text-white"><X /></button>
+                    </div>
+                    <div>
+                       <label className="text-[10px] uppercase text-muted font-bold block mb-2 tracking-widest">Código de Convite</label>
+                       <input 
+                         autoFocus
+                         value={inviteCode}
+                         onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                         className="w-full bg-white/5 border border-white/10 h-14 px-4 rounded-xl outline-none focus:border-brand-primary text-white font-display text-2xl text-center tracking-[0.5em]"
+                         placeholder="XXXXXX"
+                         maxLength={6}
+                       />
+                    </div>
+                    <Button onClick={joinGroup} className="w-full">Entrar Agora</Button>
+                 </Card>
+              </motion.div>
+           </div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack: () => void, currentUser: FirebaseUser }) {
+  const [members, setMembers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    // Fetch user profiles for all members
+    const q = query(collection(db, 'users'), where('uid', 'in', group.memberIds));
+    const unsub = onSnapshot(q, (snap) => {
+      const data = snap.docs.map(d => d.data());
+      // Sort by totalVolume for this specific comparison
+      data.sort((a, b) => (b.totalVolume || 0) - (a.totalVolume || 0));
+      setMembers(data);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [group.memberIds]);
+
+  const leaveGroup = async () => {
+    if (!confirm("Tem certeza que deseja sair do grupo?")) return;
+    try {
+      await updateDoc(doc(db, 'groups', group.id), {
+        memberIds: arrayRemove(currentUser.uid)
+      });
+      onBack();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const copyInvite = () => {
+    navigator.clipboard.writeText(group.inviteCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="py-4 space-y-6">
+      <header className="space-y-4">
+        <div className="flex justify-between items-center">
+           <Button variant="ghost" size="icon" onClick={onBack} className="w-10 h-10"><ChevronLeft /></Button>
+           <div className="flex gap-2">
+              <button 
+                onClick={copyInvite}
+                className={`h-10 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${copied ? 'bg-green-500 text-black' : 'bg-white/5 text-muted border border-white/10 hover:bg-white/10'}`}
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? 'Copiado!' : group.inviteCode}
+              </button>
+              <Button variant="danger" size="icon" onClick={leaveGroup} className="w-10 h-10 border-none bg-transparent hover:bg-red-500/10"><LogOut size={18} /></Button>
+           </div>
+        </div>
+        <div>
+           <h1 className="text-3xl font-black italic uppercase leading-none">{group.name}</h1>
+           <p className="text-[10px] text-muted font-bold uppercase tracking-[0.2em] mt-2">Leaderboard do Grupo</p>
+        </div>
+      </header>
+
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+           {members.map((member, idx) => (
+             <Card 
+               key={member.uid} 
+               className={`flex items-center gap-4 transition-all ${member.uid === currentUser.uid ? 'border-brand-primary bg-brand-primary/5 shadow-[0_0_20px_rgba(255,94,26,0.05)]' : 'border-white/5 opacity-80'}`}
+             >
+                <div className="w-6 text-center font-black italic text-gray-700">
+                   #{idx + 1}
+                </div>
+                <img 
+                  src={member.photoURL || `https://picsum.photos/seed/${member.uid}/100/100`} 
+                  alt="" 
+                  className={`w-10 h-10 rounded-xl border ${member.uid === currentUser.uid ? 'border-brand-primary' : 'border-white/10'}`} 
+                  referrerPolicy="no-referrer"
+                />
+                <div className="flex-1 min-w-0">
+                   <div className="flex items-center gap-1.5">
+                      <h4 className="font-bold text-sm truncate uppercase tracking-tight">{member.displayName}</h4>
+                      {member.uid === group.creatorId && <div className="p-0.5" title="Criador do Grupo"><Trophy size={10} className="text-yellow-500" /></div>}
+                   </div>
+                   <div className="flex items-center gap-2">
+                      <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">{member.totalWorkouts} treinos</p>
+                      <div className="w-1 h-1 bg-white/10 rounded-full" />
+                      <p className="text-[9px] text-brand-primary uppercase font-bold tracking-widest">{Math.round((member.totalVolume || 0) / 1000)}k KG</p>
+                   </div>
+                </div>
+                <div className="text-right">
+                   <div className="flex flex-col items-end">
+                      <Flame size={14} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
+                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter mt-1">{member.streak || 0}d</p>
+                   </div>
+                </div>
+             </Card>
+           ))}
+        </div>
+      )}
     </motion.div>
   );
 }
