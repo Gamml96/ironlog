@@ -57,6 +57,9 @@ import {
   loginWithGoogle, 
   db, 
   updateUserStats,
+  recalculateUserStats,
+  syncAllUserStats,
+  deleteAllWorkoutsGlobal,
   getCollectionRef,
   getDocRef,
   saveToCloud,
@@ -234,7 +237,7 @@ export default function App() {
           {activeTab === 'exercicios' && <ExerciciosView />}
           {activeTab === 'grupos' && <GruposView currentUser={user} />}
           {activeTab === 'ranking' && <RankingView currentUser={user} />}
-          {activeTab === 'config' && <SettingsView onBack={() => setActiveTab('hoje')} onLogout={() => signOut(auth)} />}
+          {activeTab === 'config' && <SettingsView user={user} onBack={() => setActiveTab('hoje')} onLogout={() => signOut(auth)} />}
         </AnimatePresence>
       </main>
 
@@ -1196,6 +1199,7 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
   const [elapsed, setElapsed] = useState(isEditing ? (session.duration || 0) : 0);
   const [restTime, setRestTime] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false);
 
   useEffect(() => {
@@ -1296,7 +1300,10 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
     setCurrentSession(newSession);
   };
 
-  const finishWorkout = () => {
+  const finishWorkout = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    
     const totalVol = currentSession.exercises.reduce((acc, ex) => {
       const detail = exerciseDetails[ex.exerciseId];
       return acc + ex.sets.reduce((sAcc, s) => {
@@ -1308,18 +1315,24 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
       }, 0);
     }, 0);
     
-    // Sync to Cloud
-    if (!isEditing) {
-      updateUserStats(auth.currentUser?.uid || '', totalVol);
-    }
+    try {
+      // Sync to Cloud
+      if (!isEditing) {
+        await updateUserStats(auth.currentUser?.uid || '', totalVol);
+      }
 
-    onSave({
-      ...currentSession,
-      totalVolume: totalVol,
-      duration: elapsed,
-      isCompleted: true,
-      date: isEditing ? currentSession.date : Date.now()
-    });
+      onSave({
+        ...currentSession,
+        totalVolume: totalVol,
+        duration: elapsed,
+        isCompleted: true,
+        date: isEditing ? currentSession.date : Date.now()
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Erro ao salvar treino. Tente novamente.");
+      setIsSaving(false);
+    }
   };
 
   const handleFinishRequest = () => {
@@ -1517,8 +1530,10 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
                    <p className="text-gray-400 text-sm font-medium">Treino concluído com sucesso. Deseja registrar a sessão?</p>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                   <Button variant="secondary" onClick={() => setIsFinishing(false)}>Ainda não</Button>
-                   <Button variant="primary" onClick={finishWorkout}>Registrar!</Button>
+                   <Button variant="secondary" onClick={() => setIsFinishing(false)} disabled={isSaving}>Ainda não</Button>
+                   <Button variant="primary" onClick={finishWorkout} disabled={isSaving}>
+                      {isSaving ? <Dumbbell className="animate-spin" size={18} /> : 'Registrar!'}
+                   </Button>
                 </div>
              </Card>
           </motion.div>
@@ -1560,7 +1575,7 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
 
 // --- View: Settings ---
 
-function SettingsView({ onBack, onLogout }: { onBack: () => void, onLogout: () => void }) {
+function SettingsView({ onBack, onLogout, user }: { onBack: () => void, onLogout: () => void, user: any }) {
   const [defaultRest, setDefaultRest] = useState(60);
   const [weeklyGoal, setWeeklyGoal] = useState(5);
   const [displayName, setDisplayName] = useState(auth.currentUser?.displayName || '');
@@ -1710,6 +1725,59 @@ function SettingsView({ onBack, onLogout }: { onBack: () => void, onLogout: () =
           <Button variant="danger" className="w-full flex gap-2 h-14" onClick={onLogout}>
             <X className="w-5 h-5" /> Sair da Conta
           </Button>
+
+          {user.email?.toLowerCase() === 'gamml1996@gmail.com' && (
+            <div className="space-y-2">
+              <Button 
+                 type="button"
+                 variant="secondary" 
+                 className="w-full h-12 text-[10px] font-bold uppercase tracking-widest bg-yellow-600"
+                 onClick={async () => {
+                    console.log("Limpar Ranking Global clicado");
+                    if(confirm("Deseja LIMPAR O RANKING GLOBAL de todos os usuários?")) {
+                      try {
+                        const usersSnap = await getDocs(collection(db, 'users'));
+                        const batch = firebaseWriteBatch(db);
+                        usersSnap.docs.forEach((u) => {
+                            batch.update(u.ref, { totalVolume: 0, totalWorkouts: 0, streak: 0 });
+                        });
+                        await batch.commit();
+                        alert("Ranking global limpo!");
+                        window.location.reload();
+                      } catch (e) { alert("Erro ao limpar ranking: " + e); }
+                    }
+                 }}
+              >
+                Limpar Ranking Global
+              </Button>
+              <Button 
+                  type="button"
+                  variant="danger" 
+                  className="w-full h-12 text-[10px] font-bold uppercase tracking-widest bg-red-800"
+                  onClick={async () => {
+                      console.log("Excluir Treinos clicado");
+                      if(confirm("Deseja APAGAR DO FIREBASE todos os treinos realizados por todos os usuários? (IRREVERSÍVEL)")) {
+                        try {
+                          const usersSnap = await getDocs(collection(db, 'users'));
+                          for (const userDoc of usersSnap.docs) {
+                            const sessionsRef = collection(db, 'users', userDoc.id, 'sessions');
+                            const sessionsSnap = await getDocs(sessionsRef);
+                            const batch = firebaseWriteBatch(db);
+                            sessionsSnap.docs.forEach(doc => {
+                              batch.delete(doc.ref);
+                            });
+                            await batch.commit();
+                          }
+                          alert("Treinos apagados!");
+                          window.location.reload();
+                        } catch (e) { alert("Erro ao apagar treinos: " + e); }
+                      }
+                  }}
+              >
+                  Excluir Todos os Treinos
+              </Button>
+            </div>
+          )}
 
           <Button 
             variant="ghost" 
@@ -2136,12 +2204,14 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
       // Sort based on competition type
       data.sort((a, b) => {
         if (group.competitionType === 'strikes') {
-          return (b.streak || 0) - (a.streak || 0);
+          return (b.totalWorkouts || 0) - (a.totalWorkouts || 0);
         } else if (group.competitionType === 'volume') {
           return (b.totalVolume || 0) - (a.totalVolume || 0);
         } else {
-          // Both: mix or simple volume for now, could be a score
-          return (b.totalVolume || 0) - (a.totalVolume || 0);
+          // Both: Mix of workouts and volume for hybrid score
+          const scoreA = (a.totalWorkouts || 0) * 1000 + (a.totalVolume || 0) / 1000;
+          const scoreB = (b.totalWorkouts || 0) * 1000 + (b.totalVolume || 0) / 1000;
+          return scoreB - scoreA;
         }
       });
       setMembers(data);
@@ -2152,13 +2222,23 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
 
   const leaveGroup = async () => {
     if (!confirm("Tem certeza que deseja sair do grupo?")) return;
+    setLoading(true);
     try {
-      await updateDoc(doc(db, 'groups', group.id), {
+      const batch = writeBatch(db);
+      const groupRef = doc(db, 'groups', group.id);
+      
+      // Atomicly remove from group memberIds
+      batch.update(groupRef, {
         memberIds: arrayRemove(currentUser.uid)
       });
+      
+      await batch.commit();
       onBack();
     } catch (err) {
-      console.error(err);
+      console.error("Error leaving group:", err);
+      alert("Erro ao sair do grupo. Verifique sua conexão.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -2220,15 +2300,28 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                       {member.uid === group.creatorId && <div className="p-0.5" title="Criador do Grupo"><Trophy size={10} className="text-yellow-500" /></div>}
                    </div>
                    <div className="flex items-center gap-2">
-                      <p className="text-[9px] text-gray-500 uppercase font-bold tracking-widest">{member.totalWorkouts} treinos</p>
+                      <p className={`text-[9px] uppercase font-bold tracking-widest ${group.competitionType === 'strikes' ? 'text-brand-primary' : 'text-gray-500'}`}>
+                         {member.totalWorkouts || 0} treinos
+                      </p>
                       <div className="w-1 h-1 bg-white/10 rounded-full" />
-                      <p className="text-[9px] text-brand-primary uppercase font-bold tracking-widest">{Math.round((member.totalVolume || 0) / 1000)}k KG</p>
+                      <p className={`text-[9px] uppercase font-bold tracking-widest ${group.competitionType === 'volume' ? 'text-brand-primary' : 'text-gray-500'}`}>
+                         {Math.round((member.totalVolume || 0) / 1000)}k KG
+                      </p>
                    </div>
                 </div>
                 <div className="text-right">
                    <div className="flex flex-col items-end">
-                      <Flame size={14} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
-                      <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter mt-1">{member.streak || 0}d</p>
+                      {group.competitionType === 'strikes' ? (
+                        <div className="flex flex-col items-end">
+                           <Trophy size={14} className="text-brand-primary" />
+                           <p className="text-[10px] text-white font-black uppercase tracking-tighter mt-1">{member.totalWorkouts || 0}</p>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-end">
+                           <Flame size={14} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
+                           <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter mt-1">{member.streak || 0}d</p>
+                        </div>
+                      )}
                    </div>
                 </div>
              </Card>

@@ -134,11 +134,31 @@ export async function updateUserStats(uid: string, volumeIncrement: number) {
   const weekId = format(now, 'yyyy-ww'); 
   const monthId = format(now, 'yyyy-MM');
   const yearId = format(now, 'yyyy');
+  const today = format(now, 'yyyy-MM-dd');
+  const lastWorkout = data?.lastWorkoutDate ? format(new Date(data.lastWorkoutDate), 'yyyy-MM-dd') : null;
+
+  let newStreak = data?.streak || 0;
+  if (!lastWorkout) {
+    newStreak = 1;
+  } else if (lastWorkout !== today) {
+    const d1 = new Date(lastWorkout);
+    const d2 = new Date(today);
+    const diffTime = Math.abs(d2.getTime() - d1.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays === 1) {
+      newStreak += 1;
+    } else if (diffDays > 1) {
+      newStreak = 1;
+    }
+  }
 
   const updates: any = {
     totalVolume: increment(volumeIncrement),
-    totalWorkouts: increment(1),
-    lastActive: Date.now()
+    totalWorkouts: lastWorkout !== today ? increment(1) : increment(0),
+    lastActive: Date.now(),
+    lastWorkoutDate: Date.now(),
+    streak: newStreak
   };
 
   // Weekly Stats
@@ -288,6 +308,59 @@ export async function updatePersonalRecords(uid: string, session: WorkoutSession
   }
 
   if (hasUpdates) {
+    await batch.commit();
+  }
+}
+
+export async function recalculateUserStats(uid: string) {
+  try {
+    const sessionsRef = collection(db, 'users', uid, 'sessions');
+    const sessionsSnap = await getDocs(sessionsRef);
+    let totalVolume = 0;
+    const workoutDays = new Set<string>();
+
+    sessionsSnap.docs.forEach(doc => {
+      const session = doc.data() as WorkoutSession;
+      if (!session.isCompleted) return;
+      totalVolume += session.totalVolume || 0;
+      workoutDays.add(format(new Date(session.date), 'yyyy-MM-dd'));
+    });
+
+    const userRef = doc(db, 'users', uid);
+    await updateDoc(userRef, {
+      totalVolume,
+      totalWorkouts: workoutDays.size
+    });
+    console.log("Stats recalculated for", uid);
+  } catch (err) {
+    console.error("Error recalculating stats:", err);
+    throw err;
+  }
+}
+
+export async function syncAllUserStats() {
+  const usersSnap = await getDocs(collection(db, 'users'));
+  for (const userDoc of usersSnap.docs) {
+    const uid = userDoc.id;
+    await recalculateUserStats(uid);
+  }
+}
+
+export async function deleteAllWorkoutsGlobal() {
+  const usersSnap = await getDocs(collection(db, 'users'));
+  for (const userDoc of usersSnap.docs) {
+    const uid = userDoc.id;
+    const sessionsRef = collection(db, 'users', uid, 'sessions');
+    const sessionsSnap = await getDocs(sessionsRef);
+    const batch = firebaseWriteBatch(db);
+    sessionsSnap.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    batch.update(doc(db, 'users', uid), {
+      totalVolume: 0,
+      totalWorkouts: 0,
+      streak: 0
+    });
     await batch.commit();
   }
 }
