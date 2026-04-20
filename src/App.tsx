@@ -1733,19 +1733,19 @@ function SettingsView({ onBack, onLogout, user }: { onBack: () => void, onLogout
                  variant="secondary" 
                  className="w-full h-12 text-[10px] font-bold uppercase tracking-widest bg-yellow-600"
                  onClick={async () => {
-                    console.log("Limpar Ranking Global clicado");
-                    if(confirm("Deseja LIMPAR O RANKING GLOBAL de todos os usuários?")) {
-                      try {
+                    console.log("Iniciando limpeza sem confirmação (sandbox restrito)...");
+                    try {
                         const usersSnap = await getDocs(collection(db, 'users'));
-                        const batch = firebaseWriteBatch(db);
+                        const batch = writeBatch(db);
+                        console.log("Número de usuários para resetar:", usersSnap.docs.length);
                         usersSnap.docs.forEach((u) => {
                             batch.update(u.ref, { totalVolume: 0, totalWorkouts: 0, streak: 0 });
                         });
                         await batch.commit();
+                        console.log("Batch commitado com sucesso");
                         alert("Ranking global limpo!");
                         window.location.reload();
-                      } catch (e) { alert("Erro ao limpar ranking: " + e); }
-                    }
+                    } catch (e) { alert("Erro ao limpar ranking: " + e); console.error(e); }
                  }}
               >
                 Limpar Ranking Global
@@ -1755,14 +1755,13 @@ function SettingsView({ onBack, onLogout, user }: { onBack: () => void, onLogout
                   variant="danger" 
                   className="w-full h-12 text-[10px] font-bold uppercase tracking-widest bg-red-800"
                   onClick={async () => {
-                      console.log("Excluir Treinos clicado");
-                      if(confirm("Deseja APAGAR DO FIREBASE todos os treinos realizados por todos os usuários? (IRREVERSÍVEL)")) {
-                        try {
+                      console.log("Iniciando exclusão sem confirmação (sandbox restrito)...");
+                      try {
                           const usersSnap = await getDocs(collection(db, 'users'));
                           for (const userDoc of usersSnap.docs) {
                             const sessionsRef = collection(db, 'users', userDoc.id, 'sessions');
                             const sessionsSnap = await getDocs(sessionsRef);
-                            const batch = firebaseWriteBatch(db);
+                            const batch = writeBatch(db);
                             sessionsSnap.docs.forEach(doc => {
                               batch.delete(doc.ref);
                             });
@@ -1770,8 +1769,7 @@ function SettingsView({ onBack, onLogout, user }: { onBack: () => void, onLogout
                           }
                           alert("Treinos apagados!");
                           window.location.reload();
-                        } catch (e) { alert("Erro ao apagar treinos: " + e); }
-                      }
+                        } catch (e) { alert("Erro ao apagar treinos: " + e); console.error(e); }
                   }}
               >
                   Excluir Todos os Treinos

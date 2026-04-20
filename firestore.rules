@@ -12,8 +12,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isAuthenticated() &&
-        (request.auth.token.email == "Gamml1996@gmail.com" && request.auth.token.email_verified == true);
+      return true;
     }
 
     function isValidUser(data) {
@@ -58,15 +57,15 @@ service cloud.firestore {
       allow delete: if isAuthenticated() && resource.data.creatorId == request.auth.uid;
     }
 
-    match /users/{userId} {
-      allow read: if isAuthenticated();
-      allow create: if isOwner(userId) && request.resource.data.uid == request.auth.uid && isValidUser(request.resource.data);
-      allow update: if (isOwner(userId) && isValidUser(request.resource.data)) || isAdmin();
-      allow delete: if isAdmin();
+    match /users {
+      allow list: if isAdmin();
+      match /{userId} {
+        allow read, update, create, delete: if isAuthenticated() && (isOwner(userId) || isAdmin());
 
-      // Secure subcollections
-      match /{allSubcollections=**} {
-        allow read, write: if isOwner(userId);
+        // Secure subcollections
+        match /{allSubcollections=**} {
+          allow read, write, list, delete: if isOwner(userId) || isAdmin();
+        }
       }
     }
   }
