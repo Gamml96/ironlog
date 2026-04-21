@@ -159,6 +159,7 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
+  const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, volume: number, date: number } | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
@@ -204,6 +205,28 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Restore active session on app load
+  useEffect(() => {
+    if (!user) return;
+    const saved = localStorage.getItem('ironlog_active_session');
+    if (saved) {
+      try {
+        const savedData = JSON.parse(saved);
+        // Only resume if it's "recent" (e.g. within 12 hours) and NOT completed
+        if (!savedData.isCompleted && Date.now() - savedData.lastUpdated < 12 * 60 * 60 * 1000) {
+          const passed = Math.floor((Date.now() - savedData.lastUpdated) / 1000);
+          setActiveWorkout({ 
+            ...savedData, 
+            duration: (savedData.duration || 0) + passed 
+          });
+          setIsWorkoutModalOpen(true); // Open it if we restored it
+        }
+      } catch (e) {
+        console.error("Failed to restore session", e);
+      }
+    }
+  }, [user]);
+
   if (authLoading) return (
     <div className="flex flex-col items-center justify-center h-screen bg-bg-base">
       <Dumbbell className="w-12 h-12 text-brand-primary animate-pulse mb-4" />
@@ -222,8 +245,14 @@ export default function App() {
           {activeTab === 'hoje' && (
             <HojeView 
               key={refreshKey} 
-              onStartWorkout={(w) => setActiveWorkout(w)} 
-              onEditSession={(s) => setActiveWorkout(s)}
+              onStartWorkout={(w) => {
+                setActiveWorkout(w);
+                setIsWorkoutModalOpen(true);
+              }} 
+              onEditSession={(s) => {
+                setActiveWorkout(s);
+                setIsWorkoutModalOpen(true);
+              }}
               onDeleteSession={handleDeleteSession}
               onSetActiveTab={setActiveTab} 
               user={user} 
@@ -239,14 +268,14 @@ export default function App() {
       </main>
 
       {/* Persistent Active Workout Bar */}
-      {activeWorkout && (
+      {activeWorkout && !isWorkoutModalOpen && (
         <motion.div 
           initial={{ y: 100 }}
           animate={{ y: 0 }}
           className="fixed bottom-20 left-4 right-4 z-50 pointer-events-none"
         >
           <div 
-            onClick={() => setActiveWorkout(activeWorkout)} // Open Fullscreen Workout (TODO)
+            onClick={() => setIsWorkoutModalOpen(true)} 
             className="bg-brand-primary text-black p-4 rounded-2xl flex items-center justify-between shadow-2xl pointer-events-auto cursor-pointer"
           >
             <div className="flex items-center gap-3">
@@ -275,14 +304,22 @@ export default function App() {
       </nav>
 
       {/* Workout Session Modal (if active) */}
-      {activeWorkout && (
+      {activeWorkout && isWorkoutModalOpen && (
         <ActiveWorkoutOverlay 
           session={activeWorkout} 
-          onClose={() => setActiveWorkout(null)} 
+          onClose={() => setIsWorkoutModalOpen(false)} 
+          onDiscard={() => {
+            console.log("Discarding workout...");
+            localStorage.removeItem('ironlog_active_session');
+            setActiveWorkout(null);
+            setIsWorkoutModalOpen(false);
+          }}
           onSave={async (w) => {
              await saveToCloud('sessions', w);
              if (user) await updatePersonalRecords(user.uid, w);
+             localStorage.removeItem('ironlog_active_session');
              setActiveWorkout(null);
+             setIsWorkoutModalOpen(false);
              setRefreshKey(k => k + 1);
              confetti({
                particleCount: 150,
@@ -1187,16 +1224,17 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
 
 // --- Active Workout Overlay (Session) ---
 
-function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSession, onClose: () => void, onSave: (w: WorkoutSession) => void }) {
+function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session: WorkoutSession, onClose: () => void, onDiscard: () => void, onSave: (w: WorkoutSession) => void }) {
   const isEditing = !!session.isCompleted;
   const [currentSession, setCurrentSession] = useState<WorkoutSession>(JSON.parse(JSON.stringify(session)));
   const [previousData, setPreviousData] = useState<Record<string, ExerciseLog | null>>({});
   const [exerciseDetails, setExerciseDetails] = useState<Record<string, Exercise>>({});
-  const [startTime] = useState(isEditing ? (session.date || Date.now()) : Date.now());
-  const [elapsed, setElapsed] = useState(isEditing ? (session.duration || 0) : 0);
+  const [startTime] = useState(isEditing ? (session.date || Date.now()) : (Date.now() - (session.duration || 0) * 1000));
+  const [elapsed, setElapsed] = useState(session.duration || 0);
   const [restTime, setRestTime] = useState(0);
   const [isFinishing, setIsFinishing] = useState(false);
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -1225,6 +1263,17 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
     }
     loadData();
   }, [currentSession.id]);
+
+  // Persist session progress to localStorage
+  useEffect(() => {
+    if (isEditing) return;
+    const sessionData = {
+      ...currentSession,
+      duration: elapsed,
+      lastUpdated: Date.now()
+    };
+    localStorage.setItem('ironlog_active_session', JSON.stringify(sessionData));
+  }, [currentSession, elapsed, isEditing]);
 
   useEffect(() => {
     if (isEditing) return;
@@ -1361,7 +1410,22 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
                </div>
             </div>
          </div>
-         <Button variant="ghost" size="sm" onClick={onClose} className="text-muted border border-white/10 h-10 px-4">Sair</Button>
+         <div className="flex items-center gap-2">
+            {!isEditing && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowDiscardConfirm(true);
+                }} 
+                className="text-red-500/60 hover:text-red-500 border border-red-500/10 h-10 px-3"
+              >
+                <Trash2 size={18} />
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={onClose} className="text-muted border border-white/10 h-10 px-4">Minimizar</Button>
+          </div>
       </header>
 
       {/* Rest Timer Banner */}
@@ -1380,6 +1444,50 @@ function ActiveWorkoutOverlay({ session, onClose, onSave }: { session: WorkoutSe
           <button onClick={() => setRestTime(0)} className="bg-black/10 p-2 rounded-full text-black hover:bg-black/20"><X size={18} strokeWidth={3} /></button>
         </motion.div>
       )}
+
+      {/* Custom Discard Confirmation Overlay */}
+      <AnimatePresence>
+        {showDiscardConfirm && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-sm"
+            >
+              <Card className="border-red-500/20 shadow-2xl">
+                <div className="text-center space-y-4">
+                  <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto">
+                    <Trash2 className="text-red-500 w-8 h-8" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black italic uppercase">Descartar Treino?</h3>
+                    <p className="text-gray-400 text-sm mt-2">
+                      Todo o progresso atual deste treino será perdido permanentemente. Esta ação não pode ser desfeita.
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2 pt-2">
+                    <Button 
+                      variant="danger" 
+                      className="w-full" 
+                      onClick={onDiscard}
+                    >
+                      Sim, Descartar
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      className="w-full border border-white/5" 
+                      onClick={() => setShowDiscardConfirm(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className="px-5 py-8 space-y-10 flex-1 pb-40">
         {currentSession.exercises.map((ex, exIdx) => {
