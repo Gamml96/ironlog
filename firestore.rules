@@ -34,9 +34,9 @@ service cloud.firestore {
              data.creatorId is string &&
              data.memberIds is list &&
              data.createdAt is number &&
-             data.startDate is number &&
-             data.endDate is number &&
-             data.rankingType in ['workouts', 'frequency'];
+             (!('startDate' in data) || data.startDate is number) &&
+             (!('endDate' in data) || data.endDate is number) &&
+             (!('rankingType' in data) || data.rankingType in ['workouts', 'frequency']);
     }
 
     match /groups/{groupId} {

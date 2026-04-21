@@ -2036,9 +2036,14 @@ function GruposView({ currentUser }: { currentUser: FirebaseUser }) {
       setInviteCode('');
       setShowJoin(false);
       setActiveGroup({ ...group, memberIds: [...group.memberIds, currentUser.uid] });
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao entrar no grupo.");
+    } catch (err: any) {
+      console.error("Join Group Error:", err);
+      // Fornecer feedback mais específico se possível
+      if (err?.code === 'permission-denied') {
+        alert("Erro de permissão: Você não tem permissão para entrar neste grupo.");
+      } else {
+        alert("Erro ao entrar no grupo. Verifique sua conexão ou o código informado.");
+      }
     }
   };
 
@@ -2225,6 +2230,12 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
   const [showConfig, setShowConfig] = useState(false);
   const [sDate, setSDate] = useState(group.startDate ? new Date(group.startDate).toISOString().split('T')[0] : '');
   const [eDate, setEDate] = useState(group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '');
+
+  // Prevenir crash se as datas estiverem faltando (grupos antigos)
+  useEffect(() => {
+    if (!sDate && group.startDate) setSDate(new Date(group.startDate).toISOString().split('T')[0]);
+    if (!eDate && group.endDate) setEDate(new Date(group.endDate).toISOString().split('T')[0]);
+  }, [group.startDate, group.endDate]);
 
   useEffect(() => {
     setLoading(true);
