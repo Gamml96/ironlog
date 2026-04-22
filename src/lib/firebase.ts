@@ -286,12 +286,12 @@ export async function updatePersonalRecords(uid: string, session: WorkoutSession
         shouldUpdate = true;
       } else {
         const currentPR = recordSnap.data() as PersonalRecord;
-        const currentWeight = currentPR.weight || 0;
-        const currentReps = currentPR.reps || 0;
+        const currentWeight = Number(currentPR.weight || 0);
+        const currentReps = Number(currentPR.reps || 0);
 
-        if (bestSet.weight > currentWeight) {
+        if (Number(bestSet.weight) > currentWeight) {
           shouldUpdate = true;
-        } else if (bestSet.weight === currentWeight && bestSet.reps > currentReps) {
+        } else if (Math.abs(Number(bestSet.weight) - currentWeight) < 0.01 && Number(bestSet.reps) > currentReps) {
           shouldUpdate = true;
         }
       }
@@ -301,8 +301,8 @@ export async function updatePersonalRecords(uid: string, session: WorkoutSession
           exerciseId,
           exerciseName,
           muscleGroup,
-          weight: bestSet.weight,
-          reps: bestSet.reps,
+          weight: Number(bestSet.weight),
+          reps: Number(bestSet.reps || 0),
           date: session.date,
           sessionId: session.id
         });

@@ -2868,7 +2868,7 @@ function ProgressoView() {
          setWeightHistory(snap.docs.map(d => d.data()));
       });
       
-      const unsubPRs = onSnapshot(query(getCollectionRef('personal_records'), orderBy('exerciseName')), (snap) => {
+      const unsubPRs = onSnapshot(query(getCollectionRef('personal_records'), orderBy('date', 'desc')), (snap) => {
          setPersonalRecords(snap.docs.map(d => d.data() as PersonalRecord));
       });
 
@@ -2951,11 +2951,14 @@ function ProgressoView() {
 
                         <div className="text-right shrink-0 relative z-10 flex items-center gap-4">
                           <div className="flex flex-col items-end">
-                            <div className="flex items-baseline gap-1">
+                            <div className="flex items-baseline gap-1.5 justify-end">
                               <span className="text-3xl font-display font-black italic tracking-tighter text-white tabular-nums">{(pr.weight || 0)}</span>
                               <span className="text-[10px] font-black text-brand-primary uppercase italic">kg</span>
                             </div>
-                            <div className="text-[10px] font-black text-muted uppercase tracking-[0.2em] mt-0.5">{(pr.reps || 0)} Reps</div>
+                            <div className="flex items-center gap-1 justify-end bg-white/5 px-2 py-0.5 rounded-lg border border-white/5 min-w-[70px]">
+                              <span className="text-lg font-display font-black italic text-brand-secondary tabular-nums">{Number(pr.reps || 0)}</span>
+                              <span className="text-[8px] font-black text-muted uppercase tracking-wider">Reps</span>
+                            </div>
                           </div>
                           
                           <button 
