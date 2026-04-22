@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Dumbbell, 
   LayoutDashboard, 
@@ -199,6 +199,49 @@ export default function App() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, volume: number, date: number } | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
 
+  // --- History/Back Button Management ---
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      if (event.state) {
+        const { tab, workoutOpen } = event.state;
+        if (tab) setActiveTab(tab);
+        if (typeof workoutOpen === 'boolean') setIsWorkoutModalOpen(workoutOpen);
+      } else {
+        setActiveTab('hoje');
+        setIsWorkoutModalOpen(false);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    
+    // Initial state setup if history is empty
+    if (!window.history.state) {
+      window.history.replaceState({ tab: activeTab, workoutOpen: isWorkoutModalOpen }, '');
+    }
+
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeTab, isWorkoutModalOpen]);
+
+  // Unified navigation functions
+  const navigateTab = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    window.history.pushState({ tab, workoutOpen: false }, '');
+  };
+
+  const openWorkoutLayer = (w: WorkoutSession) => {
+    setActiveWorkout(w);
+    setIsWorkoutModalOpen(true);
+    window.history.pushState({ tab: activeTab, workoutOpen: true }, '');
+  };
+
+  const closeWorkoutLayer = () => {
+    if (window.history.state?.workoutOpen) {
+      window.history.back();
+    } else {
+      setIsWorkoutModalOpen(false);
+    }
+  };
+
   useEffect(() => {
     const hasSeenTutorial = localStorage.getItem('ironlog_tutorial_seen');
     if (!hasSeenTutorial && !authLoading && user) {
@@ -283,20 +326,17 @@ export default function App() {
               onStartWorkout={(w) => {
                 if (activeWorkout && !activeWorkout.isCompleted) {
                   if (confirm("Você já tem um treino em andamento. Deseja descartá-lo e começar um novo?")) {
-                    setActiveWorkout(w);
-                    setIsWorkoutModalOpen(true);
+                    openWorkoutLayer(w);
                   }
                 } else {
-                  setActiveWorkout(w);
-                  setIsWorkoutModalOpen(true);
+                  openWorkoutLayer(w);
                 }
               }} 
               onEditSession={(s) => {
-                setActiveWorkout(s);
-                setIsWorkoutModalOpen(true);
+                openWorkoutLayer(s);
               }}
               onDeleteSession={handleDeleteSession}
-              onSetActiveTab={setActiveTab} 
+              onSetActiveTab={navigateTab} 
               user={user} 
             />
           )}
@@ -305,7 +345,7 @@ export default function App() {
           {activeTab === 'exercicios' && <ExerciciosView />}
           {activeTab === 'grupos' && <GruposView currentUser={user} />}
           {activeTab === 'ranking' && <RankingView currentUser={user} />}
-          {activeTab === 'config' && <SettingsView onBack={() => setActiveTab('hoje')} onLogout={() => signOut(auth)} />}
+          {activeTab === 'config' && <SettingsView onBack={() => navigateTab('hoje')} onLogout={() => signOut(auth)} />}
         </AnimatePresence>
       </main>
 
@@ -317,7 +357,10 @@ export default function App() {
           className="fixed bottom-20 left-4 right-4 z-50 pointer-events-none"
         >
           <div 
-            onClick={() => setIsWorkoutModalOpen(true)} 
+            onClick={() => {
+              setIsWorkoutModalOpen(true);
+              window.history.pushState({ tab: activeTab, workoutOpen: true }, '');
+            }} 
             className="bg-brand-primary text-black p-4 rounded-2xl flex items-center justify-between shadow-2xl pointer-events-auto cursor-pointer"
           >
             <div className="flex items-center gap-3">
@@ -337,11 +380,11 @@ export default function App() {
       {/* Bottom Navigation */}
       <nav className="fixed bottom-0 left-0 right-0 bg-bg-card/90 backdrop-blur-xl border-t border-white/5 pb-safe z-40">
         <div className="flex items-center justify-around h-20 max-w-md mx-auto px-2">
-          <NavButton icon={<LayoutDashboard />} label="Hoje" active={activeTab === 'hoje'} onClick={() => setActiveTab('hoje')} />
-          <NavButton icon={<Dumbbell />} label="Treinos" active={activeTab === 'treinos'} onClick={() => setActiveTab('treinos')} />
-          <NavButton icon={<Trophy />} label="Geral" active={activeTab === 'ranking'} onClick={() => setActiveTab('ranking')} />
-          <NavButton icon={<Users />} label="Grupos" active={activeTab === 'grupos'} onClick={() => setActiveTab('grupos')} />
-          <NavButton icon={<TrendingUp />} label="Evolução" active={activeTab === 'progresso'} onClick={() => setActiveTab('progresso')} />
+          <NavButton icon={<LayoutDashboard />} label="Hoje" active={activeTab === 'hoje'} onClick={() => navigateTab('hoje')} />
+          <NavButton icon={<Dumbbell />} label="Treinos" active={activeTab === 'treinos'} onClick={() => navigateTab('treinos')} />
+          <NavButton icon={<Trophy />} label="Geral" active={activeTab === 'ranking'} onClick={() => navigateTab('ranking')} />
+          <NavButton icon={<Users />} label="Grupos" active={activeTab === 'grupos'} onClick={() => navigateTab('grupos')} />
+          <NavButton icon={<TrendingUp />} label="Evolução" active={activeTab === 'progresso'} onClick={() => navigateTab('progresso')} />
         </div>
       </nav>
 
@@ -351,20 +394,20 @@ export default function App() {
           session={activeWorkout} 
           onClose={(updated) => {
             setActiveWorkout(updated);
-            setIsWorkoutModalOpen(false);
+            closeWorkoutLayer();
           }} 
           onDiscard={() => {
             console.log("Discarding workout...");
             localStorage.removeItem('ironlog_active_session');
             setActiveWorkout(null);
-            setIsWorkoutModalOpen(false);
+            closeWorkoutLayer();
           }}
           onSave={async (w) => {
              await saveToCloud('sessions', w);
              if (user) await updatePersonalRecords(user.uid, w);
              localStorage.removeItem('ironlog_active_session');
              setActiveWorkout(null);
-             setIsWorkoutModalOpen(false);
+             closeWorkoutLayer();
              setRefreshKey(k => k + 1);
              confetti({
                particleCount: 150,
