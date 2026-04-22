@@ -21,7 +21,7 @@ import {
   arrayRemove,
   writeBatch as firebaseWriteBatch
 } from 'firebase/firestore';
-import { DEFAULT_EXERCISES, Exercise, PersonalRecord, WorkoutSession } from './db';
+import { DEFAULT_EXERCISES, Exercise, PersonalRecord, WorkoutSession, SetLog } from './db';
 
 export { 
   getFirestore, 
@@ -233,42 +233,74 @@ export async function updatePersonalRecords(uid: string, session: WorkoutSession
   const batch = firebaseWriteBatch(db);
   let hasUpdates = false;
 
-  // Fetch all exercises to resolve names if session has empty names
+  // Fetch all exercises to resolve names and muscle groups
   const exercisesSnap = await getDocs(collection(db, 'users', uid, 'exercises'));
-  const exercisesDict: Record<string, string> = {};
-  exercisesSnap.docs.forEach(d => exercisesDict[d.id] = d.data().name);
+  const exercisesDict: Record<string, { name: string, muscleGroup: string }> = {};
+  
+  // Seed with defaults first
+  DEFAULT_EXERCISES.forEach(ex => {
+    exercisesDict[ex.id] = { name: ex.name, muscleGroup: ex.muscleGroup };
+  });
+  
+  // Overwrite with user-specific data (custom or edited)
+  exercisesSnap.docs.forEach(d => {
+    const data = d.data();
+    exercisesDict[d.id] = { name: data.name, muscleGroup: data.muscleGroup || 'Extra' };
+  });
+
+  // Group best sets by exerciseId across the whole session
+  const bestSetsByExercise: Record<string, SetLog> = {};
 
   for (const exLog of session.exercises) {
     const completedSets = exLog.sets.filter(s => s.completed);
     if (completedSets.length === 0) continue;
 
-    const bestSet = completedSets.reduce((prev, curr) => {
+    const currentBest = completedSets.reduce((prev, curr) => {
       if (curr.weight > prev.weight) return curr;
       if (curr.weight === prev.weight && curr.reps > prev.reps) return curr;
       return prev;
     }, completedSets[0]);
 
-    if (bestSet.weight > 0) {
-      const recordRef = doc(recordsRef, exLog.exerciseId);
+    const existingBest = bestSetsByExercise[exLog.exerciseId];
+    if (!existingBest || 
+        currentBest.weight > existingBest.weight || 
+        (currentBest.weight === existingBest.weight && currentBest.reps > existingBest.reps)) {
+      bestSetsByExercise[exLog.exerciseId] = currentBest;
+    }
+  }
+
+  for (const [exerciseId, bestSet] of Object.entries(bestSetsByExercise)) {
+    // Treat bodyweight exercises (0kg) as valid if reps > 0
+    if (bestSet.weight > 0 || bestSet.reps > 0) {
+      const recordRef = doc(recordsRef, exerciseId);
       const recordSnap = await getDoc(recordRef);
-      const exerciseName = exLog.exerciseName || exercisesDict[exLog.exerciseId] || 'Exercício';
+      
+      const info = exercisesDict[exerciseId];
+      // Try to find name in session first if provided
+      const sessionEx = session.exercises.find(e => e.exerciseId === exerciseId);
+      const exerciseName = sessionEx?.exerciseName || info?.name || 'Exercício';
+      const muscleGroup = info?.muscleGroup || 'Extra';
       
       let shouldUpdate = false;
       if (!recordSnap.exists()) {
         shouldUpdate = true;
       } else {
         const currentPR = recordSnap.data() as PersonalRecord;
-        if (bestSet.weight > currentPR.weight) {
+        const currentWeight = currentPR.weight || 0;
+        const currentReps = currentPR.reps || 0;
+
+        if (bestSet.weight > currentWeight) {
           shouldUpdate = true;
-        } else if (bestSet.weight === currentPR.weight && bestSet.reps > currentPR.reps) {
+        } else if (bestSet.weight === currentWeight && bestSet.reps > currentReps) {
           shouldUpdate = true;
         }
       }
 
       if (shouldUpdate) {
         batch.set(recordRef, {
-          exerciseId: exLog.exerciseId,
-          exerciseName: exerciseName,
+          exerciseId,
+          exerciseName,
+          muscleGroup,
           weight: bestSet.weight,
           reps: bestSet.reps,
           date: session.date,
@@ -282,4 +314,9 @@ export async function updatePersonalRecords(uid: string, session: WorkoutSession
   if (hasUpdates) {
     await batch.commit();
   }
+}
+
+export async function deletePersonalRecord(uid: string, exerciseId: string) {
+  const ref = doc(db, 'users', uid, 'personal_records', exerciseId);
+  await deleteDoc(ref);
 }

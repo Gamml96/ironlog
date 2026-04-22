@@ -64,6 +64,7 @@ export interface UserStats {
 export interface PersonalRecord {
   exerciseId: string;
   exerciseName: string;
+  muscleGroup?: string;
   weight: number;
   reps: number;
   date: number;
