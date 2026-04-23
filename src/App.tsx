@@ -198,6 +198,36 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string, volume: number, date: number } | null>(null);
   const [showTutorial, setShowTutorial] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  // --- PWA Install Logic ---
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+    // Also check if already installed
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstallable(false);
+    }
+
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   // --- History/Back Button Management ---
   useEffect(() => {
@@ -345,7 +375,14 @@ export default function App() {
           {activeTab === 'exercicios' && <ExerciciosView />}
           {activeTab === 'grupos' && <GruposView currentUser={user} />}
           {activeTab === 'ranking' && <RankingView currentUser={user} />}
-          {activeTab === 'config' && <SettingsView onBack={() => navigateTab('hoje')} onLogout={() => signOut(auth)} />}
+          {activeTab === 'config' && (
+            <SettingsView 
+              onBack={() => navigateTab('hoje')} 
+              onLogout={() => signOut(auth)} 
+              isInstallable={isInstallable}
+              onInstall={handleInstallClick}
+            />
+          )}
         </AnimatePresence>
       </main>
 
@@ -447,7 +484,13 @@ export default function App() {
       )}
 
       <AnimatePresence>
-        {showTutorial && <OnboardingOverlay onClose={closeTutorial} />}
+        {showTutorial && (
+          <OnboardingOverlay 
+            onClose={closeTutorial} 
+            isInstallable={isInstallable} 
+            onInstall={handleInstallClick} 
+          />
+        )}
       </AnimatePresence>
     </div>
   );
@@ -511,7 +554,11 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
   );
 }
 
-function OnboardingOverlay({ onClose }: { onClose: () => void }) {
+function OnboardingOverlay({ onClose, isInstallable, onInstall }: { 
+  onClose: () => void,
+  isInstallable: boolean,
+  onInstall: () => void
+}) {
   const [step, setStep] = useState(0);
   const steps = [
     {
@@ -532,9 +579,15 @@ function OnboardingOverlay({ onClose }: { onClose: () => void }) {
     {
       title: "Fique Atento",
       description: "Para garantir que você nunca perca o tempo de descanso, ative as notificações em segundo plano agora mesmo.",
-      icon: <CheckCircle2 size={48} />,
+      icon: <Activity size={48} />,
       isNotificationStep: true
     },
+    ...(isInstallable ? [{
+      title: "App na Tela Inicial",
+      description: "Para uma experiência de elite, instale o IronLog na sua tela inicial e acesse seus treinos com um toque.",
+      icon: <LayoutDashboard size={48} />,
+      isInstallStep: true
+    }] : []),
     {
       title: "Quebre seus Limites",
       description: "Acompanhe seus Recordes Pessoais (PRs) e gráficos de evolução. Veja sua força crescer a cada semana.",
@@ -597,9 +650,21 @@ function OnboardingOverlay({ onClose }: { onClose: () => void }) {
                       next();
                     }
                   }}
-                  className="w-full bg-brand-secondary text-black h-12 rounded-xl mb-2 font-black italic"
+                  className="w-full bg-brand-primary text-black h-12 rounded-xl mb-4 font-black italic"
                 >
-                  ATIVAR ALERTAS
+                  ATIVAR NOTIFICAÇÕES
+                </Button>
+              )}
+
+              {(steps[step] as any).isInstallStep && (
+                <Button 
+                  onClick={() => {
+                    onInstall();
+                    next();
+                  }}
+                  className="w-full bg-brand-primary text-black h-12 rounded-xl mb-4 font-black italic"
+                >
+                  ADICIONAR À TELA INICIAL
                 </Button>
               )}
             </div>
@@ -1812,7 +1877,12 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
 
 // --- View: Settings ---
 
-function SettingsView({ onBack, onLogout }: { onBack: () => void, onLogout: () => void }) {
+function SettingsView({ onBack, onLogout, isInstallable, onInstall }: { 
+  onBack: () => void, 
+  onLogout: () => void,
+  isInstallable: boolean,
+  onInstall: () => void
+}) {
   const [defaultRest, setDefaultRest] = useState(60);
   const [weeklyGoal, setWeeklyGoal] = useState(5);
   const [displayName, setDisplayName] = useState(auth.currentUser?.displayName || '');
@@ -1916,6 +1986,27 @@ function SettingsView({ onBack, onLogout }: { onBack: () => void, onLogout: () =
               </p>
            </div>
         </Card>
+
+        {isInstallable && (
+          <Card className="border-brand-primary/20 bg-brand-primary/5">
+             <div className="flex justify-between items-center">
+                <div className="flex-1">
+                   <h3 className="text-sm font-black italic uppercase text-brand-primary">IronLog no seu celular</h3>
+                   <p className="text-[10px] text-gray-400 leading-relaxed uppercase font-bold tracking-tight mt-1">
+                      Adicione o app à sua tela inicial para uma experiência de elite e acesso instantâneo.
+                   </p>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant="primary" 
+                  className="h-10 px-4 text-[10px]"
+                  onClick={onInstall}
+                >
+                  Instalar
+                </Button>
+             </div>
+          </Card>
+        )}
 
         <Card className="space-y-4">
            <div>
