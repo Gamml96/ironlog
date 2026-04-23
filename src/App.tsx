@@ -200,6 +200,7 @@ export default function App() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
+  const [weightIncrement, setWeightIncrement] = useState(2.5);
 
   // --- PWA Install Logic ---
   useEffect(() => {
@@ -312,6 +313,20 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  // Global settings listener
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(getDocRef('settings', 'user-settings'), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        if (data.defaultWeightIncrement !== undefined) {
+          setWeightIncrement(data.defaultWeightIncrement);
+        }
+      }
+    });
+    return () => unsub();
+  }, [user]);
 
   // Restore active session on app load
   useEffect(() => {
@@ -429,6 +444,7 @@ export default function App() {
       {activeWorkout && isWorkoutModalOpen && (
         <ActiveWorkoutOverlay 
           session={activeWorkout} 
+          weightIncrement={weightIncrement}
           onClose={(updated) => {
             setActiveWorkout(updated);
             closeWorkoutLayer();
@@ -441,6 +457,33 @@ export default function App() {
           }}
           onSave={async (w) => {
              await saveToCloud('sessions', w);
+             
+             // Rotate plan if this session was from a plan
+             if (w.workoutPlanId) {
+               try {
+                 const plansRef = getCollectionRef('plans');
+                 const q = query(plansRef, orderBy('order'));
+                 const snap = await getDocs(q);
+                 const allPlans = snap.docs.map(d => d.data() as WorkoutPlan);
+                 
+                 if (allPlans.length > 1) {
+                   const planToMove = allPlans.find(p => p.id === w.workoutPlanId);
+                   if (planToMove) {
+                     const remaining = allPlans.filter(p => p.id !== w.workoutPlanId);
+                     const reordered = [...remaining, planToMove];
+                     
+                     const batch = writeBatch(db);
+                     reordered.forEach((p, index) => {
+                       batch.update(getDocRef('plans', p.id), { order: index });
+                     });
+                     await batch.commit();
+                   }
+                 }
+               } catch (error) {
+                 console.error("Error rotating plans:", error);
+               }
+             }
+
              if (user) await updatePersonalRecords(user.uid, w);
              localStorage.removeItem('ironlog_active_session');
              setActiveWorkout(null);
@@ -895,7 +938,7 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
         <div className="flex items-center justify-between mb-4">
           <div className="flex flex-col">
             <span className="text-[10px] text-muted font-bold uppercase tracking-[0.05em] mb-1 leading-none">Treino de Hoje</span>
-            <h2 className="text-2xl font-black italic">Peito e Tríceps</h2>
+            <h2 className="text-2xl font-black italic">{plans[0]?.name || "Nenhum Treino"}</h2>
           </div>
           <Button variant="ghost" size="sm" onClick={() => onSetActiveTab('treinos')}>Ver Todos</Button>
         </div>
@@ -1041,7 +1084,12 @@ function TreinosView() {
         {plans.map(plan => (
           <Card key={plan.id} className="group overflow-hidden">
             <div className="flex items-center justify-between mb-2">
-               <h3 className="text-xl">{plan.name}</h3>
+               <h3 className="text-xl flex items-center gap-2">
+                 {plan.name}
+                 {plan.order === 0 && (
+                   <span className="text-[9px] bg-brand-primary text-black px-1.5 py-0.5 rounded font-black italic uppercase">Treino do Dia</span>
+                 )}
+               </h3>
                <div className="flex gap-2">
                  <Button variant="secondary" size="icon" className="h-10 w-10 p-0" onClick={() => setIsEditing(plan)}><Edit2 size={16} /></Button>
                  <Button variant="danger" size="icon" className="h-10 w-10 p-0" onClick={() => deletePlan(plan.id)}><Trash2 size={16} /></Button>
@@ -1394,7 +1442,19 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
 
 // --- Active Workout Overlay (Session) ---
 
-function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session: WorkoutSession, onClose: (updatedSession: WorkoutSession) => void, onDiscard: () => void, onSave: (w: WorkoutSession) => void }) {
+function ActiveWorkoutOverlay({ 
+  session, 
+  weightIncrement = 2.5,
+  onClose, 
+  onDiscard, 
+  onSave 
+}: { 
+  session: WorkoutSession, 
+  weightIncrement?: number,
+  onClose: (updatedSession: WorkoutSession) => void, 
+  onDiscard: () => void, 
+  onSave: (w: WorkoutSession) => void 
+}) {
   const isEditing = !!session.isCompleted;
   const [currentSession, setCurrentSession] = useState<WorkoutSession>(JSON.parse(JSON.stringify(session)));
   const [previousData, setPreviousData] = useState<Record<string, ExerciseLog | null>>({});
@@ -1425,8 +1485,10 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
       
       const latestData: Record<string, ExerciseLog | null> = {};
       for (const ex of currentSession.exercises) {
+        // Only look for sessions where this exercise actually had completed sets
         const prevSession = allSessions.find(s => 
-          s.id !== currentSession.id && s.exercises.some(e => e.exerciseId === ex.exerciseId)
+          s.id !== currentSession.id && 
+          s.exercises.some(e => e.exerciseId === ex.exerciseId && e.sets.some(st => st.completed))
         );
         latestData[ex.exerciseId] = prevSession?.exercises.find(e => e.exerciseId === ex.exerciseId) || null;
       }
@@ -1773,7 +1835,15 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
                        </span>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
-                       <Badge variant="success">Sugestão: +2.5kg</Badge>
+                       <Badge variant="success">
+                         Sugestão: {(() => {
+                           const lastSets = previousData[ex.exerciseId]?.sets || [];
+                           const maxWeight = lastSets.reduce((max, s) => Math.max(max, Number(s.weight) || 0), 0);
+                           const suggested = (maxWeight + weightIncrement).toFixed(1).replace(/\.0$/, '');
+                           const unit = detail?.muscleGroup === 'Cardio' ? 'Lvl' : 'kg';
+                           return `${suggested}${unit}`;
+                         })()}
+                       </Badge>
                     </div>
                  </div>
                ) : (
@@ -1944,6 +2014,8 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
 }) {
   const [defaultRest, setDefaultRest] = useState(60);
   const [restInput, setRestInput] = useState('60');
+  const [defaultIncrement, setDefaultIncrement] = useState(2.5);
+  const [incrementInput, setIncrementInput] = useState('2.5');
   const [weeklyGoal, setWeeklyGoal] = useState(5);
   const [displayName, setDisplayName] = useState(auth.currentUser?.displayName || '');
   const [profile, setProfile] = useState<any>(null);
@@ -1963,6 +2035,15 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
           // Default to 60 if not in database
           setDefaultRest(60);
           setRestInput('60');
+        }
+        if (data.defaultWeightIncrement !== undefined) {
+          setDefaultIncrement(data.defaultWeightIncrement);
+          if (document.activeElement?.id !== 'increment-input') {
+            setIncrementInput(String(data.defaultWeightIncrement));
+          }
+        } else {
+          setDefaultIncrement(2.5);
+          setIncrementInput('2.5');
         }
         if (data.weeklyGoal !== undefined) setWeeklyGoal(data.weeklyGoal);
       } else {
@@ -1990,9 +2071,11 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
     setIsSaving(true);
     try {
       const numericRest = parseInt(restInput) || 60;
+      const numericIncrement = parseFloat(incrementInput.replace(',', '.')) || 2.5;
       await saveToCloud('settings', { 
         id: 'user-settings', 
         defaultRestTime: numericRest,
+        defaultWeightIncrement: numericIncrement,
         weeklyGoal: weeklyGoal
       });
       if (displayName.trim() && auth.currentUser) {
@@ -2058,10 +2141,12 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
               <div className="flex items-center gap-4">
                  <input 
                    id="rest-input"
-                   type="number"
+                   type="text"
+                   inputMode="numeric"
                    value={restInput}
                    onChange={(e) => {
-                     setRestInput(e.target.value);
+                     const val = e.target.value.replace(/[^0-9]/g, '');
+                     setRestInput(val);
                      setHasChanges(true);
                    }}
                    onBlur={() => {
@@ -2073,6 +2158,35 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
                  />
                  <div className="text-brand-primary font-black italic text-xl w-16">{restInput || '0'}s</div>
               </div>
+           </div>
+        </Card>
+
+        <Card className="space-y-4">
+           <div>
+              <label className="text-xs uppercase text-muted font-bold block mb-2 tracking-widest">Incremento de Peso Padrão (kg)</label>
+              <div className="flex items-center gap-4">
+                 <input 
+                   id="increment-input"
+                   type="text"
+                   inputMode="decimal"
+                   value={incrementInput}
+                   onChange={(e) => {
+                     setIncrementInput(e.target.value);
+                     setHasChanges(true);
+                   }}
+                   onBlur={() => {
+                     const val = parseFloat(incrementInput.replace(',', '.'));
+                     if (incrementInput === '' || isNaN(val)) {
+                       setIncrementInput(String(defaultIncrement));
+                     }
+                   }}
+                   className="flex-1 bg-white/5 border border-white/10 rounded-xl h-14 px-4 focus:border-brand-primary outline-none text-white text-xl font-display font-black"
+                 />
+                 <div className="text-brand-primary font-black italic text-xl w-16">+{incrementInput || '0'}kg</div>
+              </div>
+              <p className="text-[10px] text-muted mt-2 leading-relaxed uppercase font-bold tracking-tight">
+                Valor sugerido para progressão de carga no próximo treino.
+              </p>
            </div>
         </Card>
 

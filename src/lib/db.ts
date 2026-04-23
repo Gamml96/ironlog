@@ -59,6 +59,8 @@ export interface UserStats {
   bodyWeightRecords: { date: number; weight: number }[];
   streak: number;
   lastWorkoutDate?: number;
+  defaultRestTime?: number; // in seconds
+  defaultWeightIncrement?: number; // e.g., 2.5
 }
 
 export interface PersonalRecord {
