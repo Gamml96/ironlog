@@ -1754,12 +1754,22 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
                     <div className="flex flex-col gap-1">
                        <span className="uppercase font-black text-brand-primary tracking-widest">Última sessão:</span>
                        <span className="text-white font-medium text-xs">
-                          {previousData[ex.exerciseId]?.sets.map(s => {
-                             if (detail?.muscleGroup === 'Cardio') {
-                               return `${s.weight}Lvl x ${s.duration ? Math.floor(s.duration / 60) : 0}min`;
-                             }
-                             return `${s.weight}kg x ${s.reps}`;
-                           }).join(' | ')}
+                          {previousData[ex.exerciseId]?.sets
+                            .filter(s => (s.weight || 0) > 0 || (detail?.muscleGroup === 'Cardio' ? (s.duration || 0) > 0 : (s.reps || 0) > 0))
+                            .map((s, idx) => {
+                              if (detail?.muscleGroup === 'Cardio') {
+                                const d = (s.duration || 0) > 0 ? Math.floor(s.duration / 60) : (ex.targetDuration ? Math.floor(ex.targetDuration / 60) : '--');
+                                return `${s.weight}Lvl x ${d}min`;
+                              }
+                              const r = (s.reps || 0) > 0 ? s.reps : (() => {
+                                if (ex.isVariationPerSet && ex.targetReps) {
+                                  const parts = ex.targetReps.split(',').map(p => p.trim());
+                                  return parts[idx] || parts[parts.length - 1];
+                                }
+                                return ex.targetReps || '--';
+                              })();
+                              return `${s.weight}kg x ${r}`;
+                            }).join(' | ') || 'Sem séries recentes'}
                        </span>
                     </div>
                     <div className="flex items-center gap-2 mt-1">
