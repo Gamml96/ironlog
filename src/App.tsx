@@ -1888,6 +1888,8 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
   const [weeklyGoal, setWeeklyGoal] = useState(5);
   const [displayName, setDisplayName] = useState(auth.currentUser?.displayName || '');
   const [profile, setProfile] = useState<any>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
 
   useEffect(() => {
     const unsubSettings = onSnapshot(getDocRef('settings', 'user-settings'), (doc) => {
@@ -1898,8 +1900,17 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
           if (document.activeElement?.id !== 'rest-input') {
             setRestInput(String(data.defaultRestTime));
           }
+        } else {
+          // Default to 60 if not in database
+          setDefaultRest(60);
+          setRestInput('60');
         }
         if (data.weeklyGoal !== undefined) setWeeklyGoal(data.weeklyGoal);
+      } else {
+        // Doc doesn't exist, use defaults
+        setDefaultRest(60);
+        setRestInput('60');
+        setWeeklyGoal(5);
       }
     });
 
@@ -1916,16 +1927,24 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
     };
   }, []);
 
-  const saveSettings = async (updates: any) => {
-    await saveToCloud('settings', { id: 'user-settings', ...updates });
-  };
-
-  const updateName = async () => {
-    if (!displayName.trim() || !auth.currentUser) return;
+  const handleSave = async () => {
+    setIsSaving(true);
     try {
-      await updateUserDisplayName(auth.currentUser.uid, displayName.trim());
+      const numericRest = parseInt(restInput) || 60;
+      await saveToCloud('settings', { 
+        id: 'user-settings', 
+        defaultRestTime: numericRest,
+        weeklyGoal: weeklyGoal
+      });
+      if (displayName.trim() && auth.currentUser) {
+        await updateUserDisplayName(auth.currentUser.uid, displayName.trim());
+      }
+      setHasChanges(false);
+      // Optional: visual feedback
     } catch (err) {
       console.error(err);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -1936,9 +1955,24 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
       exit={{ opacity: 0, x: 20 }}
       className="py-4 space-y-8"
     >
-      <header className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={onBack}><ChevronLeft /></Button>
-        <h1 className="text-3xl italic font-black uppercase tracking-tighter">Ajustes</h1>
+      <header className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={onBack}><ChevronLeft /></Button>
+          <h1 className="text-3xl italic font-black uppercase tracking-tighter">Ajustes</h1>
+        </div>
+        <Button 
+          size="sm" 
+          disabled={!hasChanges} 
+          loading={isSaving}
+          onClick={handleSave}
+          className={`h-10 px-6 rounded-xl italic font-black transition-all ${
+            hasChanges 
+              ? 'bg-brand-primary text-black shadow-[0_4px_15px_rgba(255,94,26,0.3)]' 
+              : 'bg-white/5 text-white/20 border border-white/5'
+          }`}
+        >
+          SALVAR
+        </Button>
       </header>
 
       <div className="flex items-center gap-4 px-2">
@@ -1947,8 +1981,10 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
           <div className="flex items-center gap-2">
             <input 
               value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              onBlur={updateName}
+              onChange={(e) => {
+                setDisplayName(e.target.value);
+                setHasChanges(true);
+              }}
               className="bg-transparent border-b border-white/10 focus:border-brand-primary outline-none font-display text-xl leading-none italic uppercase w-full py-1"
             />
           </div>
@@ -1966,12 +2002,8 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
                    type="number"
                    value={restInput}
                    onChange={(e) => {
-                     const val = e.target.value;
-                     setRestInput(val);
-                     const numeric = parseInt(val);
-                     if (!isNaN(numeric)) {
-                       saveSettings({ defaultRestTime: numeric });
-                     }
+                     setRestInput(e.target.value);
+                     setHasChanges(true);
                    }}
                    onBlur={() => {
                      if (restInput === '' || isNaN(parseInt(restInput))) {
@@ -1995,7 +2027,10 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
                    max="7"
                    step="1"
                    value={weeklyGoal}
-                   onChange={(e) => saveSettings({ weeklyGoal: parseInt(e.target.value) })}
+                   onChange={(e) => {
+                     setWeeklyGoal(parseInt(e.target.value));
+                     setHasChanges(true);
+                   }}
                    className="flex-1 h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-brand-primary"
                  />
                  <div className="text-brand-primary font-black italic text-2xl w-10">{weeklyGoal}</div>
