@@ -3,6 +3,7 @@ import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { format } from 'date-fns';
 import { 
   getFirestore, 
+  initializeFirestore,
   doc, 
   setDoc, 
   getDoc, 
@@ -14,6 +15,7 @@ import {
   limit, 
   onSnapshot,
   getDocs,
+  getDocFromServer,
   deleteDoc,
   writeBatch,
   where,
@@ -23,8 +25,8 @@ import {
 } from 'firebase/firestore';
 import { DEFAULT_EXERCISES, Exercise, PersonalRecord, WorkoutSession, SetLog } from './db';
 
+// Re-export Firestore primitives
 export { 
-  getFirestore, 
   doc, 
   setDoc, 
   getDoc, 
@@ -36,18 +38,49 @@ export {
   limit, 
   onSnapshot,
   getDocs,
+  getDocFromServer,
   deleteDoc,
   writeBatch,
   where,
   arrayUnion,
   arrayRemove
 };
+
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+
+// Use initializeFirestore with long polling for better reliability in review environments
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId);
+
 export const googleProvider = new GoogleAuthProvider();
+
+// Connection test as per integration guidelines
+async function testConnection() {
+  try {
+    // Attempt to fetch a doc from the server to verify connectivity
+    await getDocFromServer(doc(db, '_connection_test_', 'test'));
+    console.log("Firestore connection verified.");
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    
+    // "Missing or insufficient permissions" actually means we reached the server successfully
+    if (errorMsg.includes('insufficient permissions')) {
+      console.log("Firestore connection verified (via permission response).");
+      return;
+    }
+
+    if (errorMsg.includes('the client is offline')) {
+      console.error("Please check your Firebase configuration or internet connection.");
+    } else {
+      console.error("Firestore connectivity check failed:", error);
+    }
+  }
+}
+testConnection();
 
 // Database Helper functions for user subcollections
 export const getCollectionRef = (sub: string) => {

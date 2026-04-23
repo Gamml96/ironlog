@@ -1491,9 +1491,47 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
   const toggleSet = (exIdx: number, setIdx: number) => {
     const updatedExercises = currentSession.exercises.map((ex, i) => {
       if (i !== exIdx) return ex;
+      const detail = exerciseDetails[ex.exerciseId];
       const updatedSets = ex.sets.map((s, j) => {
         if (j !== setIdx) return s;
-        return { ...s, completed: !s.completed };
+        const isTurningOn = !s.completed;
+        let newState = { ...s, completed: isTurningOn };
+
+        // If completing and values are empty, auto-fill from previous session or plan
+        if (isTurningOn && !isEditing) {
+          const prevEx = previousData[ex.exerciseId];
+          const hasWeight = s.weight > 0;
+          const hasReps = s.reps > 0;
+          const hasDuration = (s.duration || 0) > 0;
+
+          if (!hasWeight) {
+            const prevWeight = prevEx?.sets[setIdx]?.weight ?? prevEx?.sets[prevEx.sets.length - 1]?.weight;
+            if (prevWeight && prevWeight > 0) {
+              newState.weight = prevWeight;
+            }
+          }
+
+          if (!hasReps) {
+            const isCardio = detail?.muscleGroup === 'Cardio';
+            const prevReps = isCardio
+              ? (prevEx?.sets[setIdx]?.duration ?? prevEx?.sets[prevEx.sets.length - 1]?.duration)
+              : (prevEx?.sets[setIdx]?.reps ?? prevEx?.sets[prevEx.sets.length - 1]?.reps);
+
+            if (prevReps && prevReps > 0) {
+              if (isCardio) {
+                newState.duration = prevReps;
+              } else {
+                newState.reps = prevReps;
+              }
+            } else if (isCardio) {
+              if (ex.targetDuration) newState.duration = ex.targetDuration;
+            } else if (ex.targetReps) {
+              const parts = ex.targetReps.split(',').map(p => p.trim());
+              newState.reps = parseInt(parts[setIdx] || parts[parts.length - 1]) || 0;
+            }
+          }
+        }
+        return newState;
       });
       return { ...ex, sets: updatedSets };
     });
@@ -1742,7 +1780,7 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
                     <div></div>
                   </div>
                   {ex.sets.map((set, setIdx) => {
-                    const getPlaceholder = () => {
+                    const getPlanReps = () => {
                       if (detail?.muscleGroup === 'Cardio') {
                         return ex.targetDuration ? String(Math.floor(ex.targetDuration / 60)) : '--';
                       }
@@ -1752,6 +1790,17 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
                       }
                       return ex.targetReps || '--';
                     };
+
+                    const prevEx = previousData[ex.exerciseId];
+                    const prevWeight = prevEx?.sets[setIdx]?.weight ?? prevEx?.sets[prevEx.sets.length - 1]?.weight;
+                    const prevReps = detail?.muscleGroup === 'Cardio' 
+                      ? (prevEx?.sets[setIdx]?.duration ?? prevEx?.sets[prevEx.sets.length - 1]?.duration)
+                      : (prevEx?.sets[setIdx]?.reps ?? prevEx?.sets[prevEx.sets.length - 1]?.reps);
+
+                    const weightPlaceholder = (prevWeight && prevWeight > 0) ? String(prevWeight) : '--';
+                    const repsPlaceholder = (prevReps && prevReps > 0) 
+                      ? (detail?.muscleGroup === 'Cardio' ? String(Math.floor(prevReps / 60)) : String(prevReps))
+                      : getPlanReps();
 
                     return (
                       <div 
@@ -1765,8 +1814,8 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
                              inputMode="decimal"
                              value={set.weight || ''}
                              onChange={(e) => updateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)}
-                             className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0"
-                             placeholder="--"
+                             className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0 placeholder:text-white/30"
+                             placeholder={weightPlaceholder}
                            />
                          </div>
                          <div className="flex flex-col">
@@ -1781,8 +1830,8 @@ function ActiveWorkoutOverlay({ session, onClose, onDiscard, onSave }: { session
                                  updateSet(exIdx, setIdx, 'reps', parseInt(e.target.value) || 0);
                                }
                              }}
-                             className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0"
-                             placeholder={getPlaceholder()}
+                             className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0 placeholder:text-white/30"
+                             placeholder={repsPlaceholder}
                            />
                          </div>
                          <button 

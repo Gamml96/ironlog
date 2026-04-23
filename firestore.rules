@@ -87,5 +87,10 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
     }
+
+    // Allow public read for connectivity health check
+    match /_connection_test_/{docId} {
+      allow read: if true;
+    }
   }
 }
