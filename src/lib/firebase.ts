@@ -214,7 +214,7 @@ export async function deleteSession(uid: string, sessionId: string, volume: numb
 // Data Methods
 export async function saveToCloud(collectionName: string, data: any) {
   const ref = getDocRef(collectionName, data.id || 'default');
-  await setDoc(ref, data);
+  await setDoc(ref, data, { merge: true });
 }
 
 export async function deleteFromCloud(collectionName: string, id: string) {

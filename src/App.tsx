@@ -1884,6 +1884,7 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
   onInstall: () => void
 }) {
   const [defaultRest, setDefaultRest] = useState(60);
+  const [restInput, setRestInput] = useState('60');
   const [weeklyGoal, setWeeklyGoal] = useState(5);
   const [displayName, setDisplayName] = useState(auth.currentUser?.displayName || '');
   const [profile, setProfile] = useState<any>(null);
@@ -1892,8 +1893,13 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
     const unsubSettings = onSnapshot(getDocRef('settings', 'user-settings'), (doc) => {
       if (doc.exists()) {
         const data = doc.data();
-        if (data.defaultRestTime) setDefaultRest(data.defaultRestTime);
-        if (data.weeklyGoal) setWeeklyGoal(data.weeklyGoal);
+        if (data.defaultRestTime !== undefined) {
+          setDefaultRest(data.defaultRestTime);
+          if (document.activeElement?.id !== 'rest-input') {
+            setRestInput(String(data.defaultRestTime));
+          }
+        }
+        if (data.weeklyGoal !== undefined) setWeeklyGoal(data.weeklyGoal);
       }
     });
 
@@ -1956,12 +1962,25 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
               <label className="text-xs uppercase text-muted font-bold block mb-2 tracking-widest">Tempo de Descanso Padrão (segundos)</label>
               <div className="flex items-center gap-4">
                  <input 
+                   id="rest-input"
                    type="number"
-                   value={defaultRest}
-                   onChange={(e) => saveSettings({ defaultRestTime: parseInt(e.target.value) || 0 })}
+                   value={restInput}
+                   onChange={(e) => {
+                     const val = e.target.value;
+                     setRestInput(val);
+                     const numeric = parseInt(val);
+                     if (!isNaN(numeric)) {
+                       saveSettings({ defaultRestTime: numeric });
+                     }
+                   }}
+                   onBlur={() => {
+                     if (restInput === '' || isNaN(parseInt(restInput))) {
+                       setRestInput(String(defaultRest));
+                     }
+                   }}
                    className="flex-1 bg-white/5 border border-white/10 rounded-xl h-14 px-4 focus:border-brand-primary outline-none text-white text-xl font-display font-black"
                  />
-                 <div className="text-brand-primary font-black italic text-xl w-16">{defaultRest}s</div>
+                 <div className="text-brand-primary font-black italic text-xl w-16">{restInput || '0'}s</div>
               </div>
            </div>
         </Card>
