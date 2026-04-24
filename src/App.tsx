@@ -187,6 +187,33 @@ const Badge = ({ children, variant = 'primary' }: { children: React.ReactNode, v
   </span>
 );
 
+// --- Global Helpers ---
+
+const rotateWorkoutPlans = async (planId: string) => {
+  try {
+    const plansRef = getCollectionRef('plans');
+    const q = query(plansRef, orderBy('order'));
+    const snap = await getDocs(q);
+    const allPlans = snap.docs.map(d => d.data() as WorkoutPlan);
+    
+    if (allPlans.length < 2) return;
+
+    const planToMove = allPlans.find(p => p.id === planId);
+    if (planToMove) {
+      const remaining = allPlans.filter(p => p.id !== planId);
+      const reordered = [...remaining, planToMove];
+      
+      const batch = writeBatch(db);
+      reordered.forEach((p, index) => {
+        batch.update(getDocRef('plans', p.id), { order: index });
+      });
+      await batch.commit();
+    }
+  } catch (error) {
+    console.error("Error rotating plans:", error);
+  }
+};
+
 // --- App Entry & Navigation ---
 
 export default function App() {
@@ -460,28 +487,7 @@ export default function App() {
              
              // Rotate plan if this session was from a plan
              if (w.workoutPlanId) {
-               try {
-                 const plansRef = getCollectionRef('plans');
-                 const q = query(plansRef, orderBy('order'));
-                 const snap = await getDocs(q);
-                 const allPlans = snap.docs.map(d => d.data() as WorkoutPlan);
-                 
-                 if (allPlans.length > 1) {
-                   const planToMove = allPlans.find(p => p.id === w.workoutPlanId);
-                   if (planToMove) {
-                     const remaining = allPlans.filter(p => p.id !== w.workoutPlanId);
-                     const reordered = [...remaining, planToMove];
-                     
-                     const batch = writeBatch(db);
-                     reordered.forEach((p, index) => {
-                       batch.update(getDocRef('plans', p.id), { order: index });
-                     });
-                     await batch.commit();
-                   }
-                 }
-               } catch (error) {
-                 console.error("Error rotating plans:", error);
-               }
+               await rotateWorkoutPlans(w.workoutPlanId);
              }
 
              if (user) await updatePersonalRecords(user.uid, w);
@@ -844,17 +850,7 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
   }, [user.uid]);
 
   const skipWorkout = async (plan: WorkoutPlan) => {
-    if (plans.length < 2) return;
-    
-    // Cloud sync: Move current plan to end
-    const remainingPlans = plans.filter(p => p.id !== plan.id);
-    const reordered: WorkoutPlan[] = [...remainingPlans, plan];
-    
-    const batch = writeBatch(db);
-    for (let i = 0; i < reordered.length; i++) {
-       batch.update(getDocRef('plans', reordered[i].id), { order: i });
-    }
-    await batch.commit();
+    await rotateWorkoutPlans(plan.id);
   };
 
   const startEmptyWorkout = (plan: WorkoutPlan) => {
@@ -933,6 +929,55 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
             +{streak}
          </div>
       </Card>
+
+      {/* Workout Flow Timeline */}
+      {(recentSessions.length > 0 || plans.length > 0) && (
+        <div className="flex items-center justify-center gap-0 mb-8 px-4 max-w-md mx-auto">
+          {/* Previous Workout */}
+          <div className="flex flex-col items-center flex-1 min-w-0">
+            <div className={`w-11 h-11 rounded-2xl flex items-center justify-center border transition-all ${recentSessions[0] ? 'bg-white/5 border-white/10 text-muted-foreground' : 'border-dashed border-white/5 text-white/5'}`}>
+              <CheckCircle2 size={18} className={recentSessions[0] ? 'text-brand-primary/50' : ''} />
+            </div>
+            <span className="text-[9px] font-black italic uppercase mt-2 text-muted-foreground truncate w-full text-center px-1">
+              {recentSessions[0]?.workoutPlanName || "Vazio"}
+            </span>
+            <span className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/40 mt-0.5">
+              {recentSessions[0] ? formatDistanceToNow(recentSessions[0].date, { addSuffix: true, locale: ptBR }) : 'Pendente'}
+            </span>
+          </div>
+
+          {/* Connector */}
+          <div className="w-8 h-[2px] bg-white/5 mb-6 opacity-50" />
+
+          {/* Current Workout (The Goal) */}
+          <div className="flex flex-col items-center flex-1 min-w-0 scale-110">
+            <div className="w-14 h-14 rounded-3xl bg-brand-primary text-black flex items-center justify-center shadow-[0_0_30px_rgba(255,94,26,0.3)] relative border-4 border-bg-base">
+              <Dumbbell size={24} fill="currentColor" />
+              <div className="absolute -bottom-1 -right-1 bg-white text-black rounded-full px-1.5 py-0.5 text-[8px] font-black shadow-lg border border-brand-primary">
+                HOJE
+              </div>
+            </div>
+            <span className="text-[10px] font-black italic uppercase mt-3 text-white truncate w-full text-center px-1">
+              {plans[0]?.name || "Nenhum"}
+            </span>
+            <span className="text-[8px] font-black uppercase tracking-[0.2em] text-brand-primary mt-1">Ativo</span>
+          </div>
+
+          {/* Connector */}
+          <div className="w-8 h-[2px] bg-white/5 mb-6 opacity-50" />
+
+          {/* Next Workout */}
+          <div className="flex flex-col items-center flex-1 min-w-0 opacity-40">
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center border border-white/10 bg-white/5 text-muted-foreground">
+              <Target size={18} />
+            </div>
+            <span className="text-[9px] font-black italic uppercase mt-2 text-muted-foreground truncate w-full text-center px-1">
+              {plans[1]?.name || "..." }
+            </span>
+            <span className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/40 mt-0.5">Próximo</span>
+          </div>
+        </div>
+      )}
 
       <section>
         <div className="flex items-center justify-between mb-4">
@@ -1086,8 +1131,8 @@ function TreinosView() {
             <div className="flex items-center justify-between mb-2">
                <h3 className="text-xl flex items-center gap-2">
                  {plan.name}
-                 {plan.order === 0 && (
-                   <span className="text-[9px] bg-brand-primary text-black px-1.5 py-0.5 rounded font-black italic uppercase">Treino do Dia</span>
+                 {plans[0]?.id === plan.id && (
+                   <span className="text-[9px] bg-brand-primary text-black px-1.5 py-0.5 rounded font-black italic uppercase">Treino de Hoje</span>
                  )}
                </h3>
                <div className="flex gap-2">
