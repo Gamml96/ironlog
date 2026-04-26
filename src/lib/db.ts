@@ -135,4 +135,12 @@ export const DEFAULT_EXERCISES: Exercise[] = [
   { id: 'cd3', name: 'Elíptico', muscleGroup: 'Cardio' },
   { id: 'cd4', name: 'Pular Corda', muscleGroup: 'Cardio' },
   { id: 'cd5', name: 'Remo', muscleGroup: 'Cardio' },
+  // Lutas
+  { id: 'ft1', name: 'Jiu-Jitsu (Treino)', muscleGroup: 'Lutas' },
+  { id: 'ft2', name: 'Muay Thai (Aula)', muscleGroup: 'Lutas' },
+  { id: 'ft3', name: 'Boxe (Sparring/Aula)', muscleGroup: 'Lutas' },
+  { id: 'ft4', name: 'MMA (Mixed Martial Arts)', muscleGroup: 'Lutas' },
+  { id: 'ft5', name: 'Wrestling', muscleGroup: 'Lutas' },
+  { id: 'ft6', name: 'Karate / Taekwondo', muscleGroup: 'Lutas' },
+  { id: 'ft7', name: 'Judô', muscleGroup: 'Lutas' },
 ];

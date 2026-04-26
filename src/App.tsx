@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   Activity,
   Info,
+  HelpCircle,
   Users,
   Copy,
   LogOut,
@@ -106,9 +107,10 @@ const calculateEstimatedDuration = (plan: WorkoutPlan) => {
 
 const calculateSessionVolume = (session: WorkoutSession) => {
   return session.exercises.reduce((acc, ex) => {
-    // Detect cardio by ID prefix 'cd' or checking defaults
+    // Detect cardio or fights by ID prefix or checking defaults
     const isCardio = ex.exerciseId.startsWith('cd') || 
-                     DEFAULT_EXERCISES.find(d => d.id === ex.exerciseId)?.muscleGroup === 'Cardio';
+                     ex.exerciseId.startsWith('ft') ||
+                     ['Cardio', 'Lutas'].includes(DEFAULT_EXERCISES.find(d => d.id === ex.exerciseId)?.muscleGroup || '');
     
     return acc + ex.sets.reduce((sAcc, s) => {
       if (!s.completed) return sAcc;
@@ -1293,7 +1295,7 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
                         </div>
                         
                         <div className="flex items-center gap-1">
-                          {baseInfo?.muscleGroup === 'Cardio' ? (
+                          {['Cardio', 'Lutas'].includes(baseInfo?.muscleGroup || '') ? (
                             <div className="flex items-center gap-1">
                               <input 
                                 type="number"
@@ -1327,25 +1329,30 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
                                   newExs[idx].isVariationPerSet = !newExs[idx].isVariationPerSet;
                                   setEditedPlan({...editedPlan, exercises: newExs});
                                 }}
-                                className={`p-1.5 rounded-lg transition-colors flex items-center justify-center ${ex.isVariationPerSet ? 'bg-brand-primary text-black' : 'bg-white/5 text-gray-500 hover:text-white'}`}
-                                title={ex.isVariationPerSet ? "Séries variadas ativas" : "Ativar séries variadas"}
+                                className={`h-8 px-2 rounded-lg transition-colors flex items-center gap-1.5 ${ex.isVariationPerSet ? 'bg-brand-primary text-black' : 'bg-white/5 text-gray-500 hover:text-white'}`}
                               >
                                 <Activity size={12} />
+                                <span className="text-[8px] font-black uppercase tracking-wider">Séries Variadas</span>
                               </button>
                               
-                              {ex.isVariationPerSet && (
-                                <div className="group relative">
-                                  <Info size={12} className="text-brand-primary/60 cursor-help" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-black border border-white/10 p-2 rounded-lg text-[8px] leading-tight text-gray-400 opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity pointer-events-none z-50">
-                                    Use vírgulas para separar as repetições de cada série. Ex: <span className="text-brand-primary">12, 10, 8</span>
+                              <div className="group relative">
+                                <HelpCircle size={14} className="text-muted-foreground/40 hover:text-brand-primary cursor-help transition-all" />
+                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-black/95 backdrop-blur-md border border-white/10 p-3 rounded-xl shadow-2xl text-[9px] leading-relaxed text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                                  Ao ativar <span className="text-brand-primary font-bold">Séries Variadas</span>, você pode definir repetições diferentes para cada série usando vírgulas.
+                                  <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2">
+                                    <span className="text-gray-500 italic">Exemplo:</span>
+                                    <span className="text-white font-mono bg-white/10 px-1.5 py-0.5 rounded leading-none">12, 10, 8</span>
                                   </div>
                                 </div>
-                              )}
+                              </div>
                             </>
                           )}
                         </div>
                         {ex.isVariationPerSet && (
-                          <p className="text-[7px] text-brand-primary/50 uppercase font-black tracking-widest mt-1 ml-1">Usar vírgulas: 12,10,8</p>
+                          <div className="w-full mt-1.5 pl-1 flex items-center gap-2">
+                             <div className="w-1 h-1 rounded-full bg-brand-primary animate-pulse" />
+                             <span className="text-[7px] text-brand-primary/60 uppercase font-black tracking-[0.1em]">Formato: 12,10,8</span>
+                          </div>
                         )}
 
                         <div className="flex items-center gap-1">
@@ -1466,7 +1473,7 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
                         onChange={(e) => setNewExGroup(e.target.value)}
                         className="w-full bg-black/40 border border-white/10 rounded-xl h-12 px-4 focus:border-brand-primary outline-none text-white text-sm appearance-none"
                       >
-                         {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core', 'Cardio'].map(g => (
+                         {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core', 'Cardio', 'Lutas'].map(g => (
                            <option key={g} value={g}>{g}</option>
                          ))}
                       </select>
@@ -1619,7 +1626,7 @@ function ActiveWorkoutOverlay({
           }
 
           if (!hasReps) {
-            const isCardio = detail?.muscleGroup === 'Cardio';
+            const isCardio = ['Cardio', 'Lutas'].includes(detail?.muscleGroup || '');
             const prevReps = isCardio
               ? (prevEx?.sets[setIdx]?.duration ?? prevEx?.sets[prevEx.sets.length - 1]?.duration)
               : (prevEx?.sets[setIdx]?.reps ?? prevEx?.sets[prevEx.sets.length - 1]?.reps);
@@ -1841,6 +1848,7 @@ function ActiveWorkoutOverlay({
       <div className="px-5 py-8 space-y-10 flex-1 pb-40">
         {currentSession.exercises.map((ex, exIdx) => {
           const detail = exerciseDetails[ex.exerciseId];
+          const isTimeEx = ['Cardio', 'Lutas'].includes(detail?.muscleGroup || '');
           const planEx = session.exercises[exIdx]; // Original plan details if needed
           return (
             <div key={exIdx} className="bg-bg-card rounded-[24px] p-6 border-l-4 border-l-brand-primary shadow-xl">
@@ -1850,7 +1858,7 @@ function ActiveWorkoutOverlay({
                </div>
                
                <div className="flex gap-4 text-muted text-xs font-bold uppercase tracking-widest mb-6 px-1">
-                 <span>Meta: {ex.sets.length} {detail?.muscleGroup === 'Cardio' ? 'SxT' : 'SxR'}</span>
+                 <span>Meta: {ex.sets.length} {['Cardio', 'Lutas'].includes(detail?.muscleGroup || '') ? 'SxT' : 'SxR'}</span>
                  <div className="w-1 h-1 bg-muted/40 rounded-full mt-1.5" />
                  <span>{detail?.muscleGroup || 'Muscle'}</span>
                </div>
@@ -1862,9 +1870,9 @@ function ActiveWorkoutOverlay({
                        <span className="uppercase font-black text-brand-primary tracking-widest">Última sessão:</span>
                        <span className="text-white font-medium text-xs">
                           {previousData[ex.exerciseId]?.sets
-                            .filter(s => (s.weight || 0) > 0 || (detail?.muscleGroup === 'Cardio' ? (s.duration || 0) > 0 : (s.reps || 0) > 0))
+                            .filter(s => (s.weight || 0) > 0 || (isTimeEx ? (s.duration || 0) > 0 : (s.reps || 0) > 0))
                             .map((s, idx) => {
-                              if (detail?.muscleGroup === 'Cardio') {
+                              if (isTimeEx) {
                                 const d = (s.duration || 0) > 0 ? Math.floor(s.duration / 60) : (ex.targetDuration ? Math.floor(ex.targetDuration / 60) : '--');
                                 return `${s.weight}Lvl x ${d}min`;
                               }
@@ -1885,7 +1893,7 @@ function ActiveWorkoutOverlay({
                            const lastSets = previousData[ex.exerciseId]?.sets || [];
                            const maxWeight = lastSets.reduce((max, s) => Math.max(max, Number(s.weight) || 0), 0);
                            const suggested = (maxWeight + weightIncrement).toFixed(1).replace(/\.0$/, '');
-                           const unit = detail?.muscleGroup === 'Cardio' ? 'Lvl' : 'kg';
+                           const unit = isTimeEx ? 'Lvl' : 'kg';
                            return `${suggested}${unit}`;
                          })()}
                        </Badge>
@@ -1900,13 +1908,13 @@ function ActiveWorkoutOverlay({
                <div className="space-y-3">
                   <div className="grid grid-cols-[40px_1fr_1fr_50px] gap-3 px-3 text-[10px] font-black uppercase text-muted tracking-widest">
                     <div className="text-center">Set</div>
-                    <div className="text-center">{detail?.muscleGroup === 'Cardio' ? 'Nível/Vel' : 'Peso kg'}</div>
-                    <div className="text-center">{detail?.muscleGroup === 'Cardio' ? 'Tempo min' : 'Reps'}</div>
+                    <div className="text-center">{['Cardio', 'Lutas'].includes(detail?.muscleGroup || '') ? 'Nível/Vel' : 'Peso kg'}</div>
+                    <div className="text-center">{['Cardio', 'Lutas'].includes(detail?.muscleGroup || '') ? 'Tempo min' : 'Reps'}</div>
                     <div></div>
                   </div>
                   {ex.sets.map((set, setIdx) => {
                     const getPlanReps = () => {
-                      if (detail?.muscleGroup === 'Cardio') {
+                      if (isTimeEx) {
                         return ex.targetDuration ? String(Math.floor(ex.targetDuration / 60)) : '--';
                       }
                       if (ex.isVariationPerSet && ex.targetReps) {
@@ -1918,13 +1926,13 @@ function ActiveWorkoutOverlay({
 
                     const prevEx = previousData[ex.exerciseId];
                     const prevWeight = prevEx?.sets[setIdx]?.weight ?? prevEx?.sets[prevEx.sets.length - 1]?.weight;
-                    const prevReps = detail?.muscleGroup === 'Cardio' 
+                    const prevReps = isTimeEx 
                       ? (prevEx?.sets[setIdx]?.duration ?? prevEx?.sets[prevEx.sets.length - 1]?.duration)
                       : (prevEx?.sets[setIdx]?.reps ?? prevEx?.sets[prevEx.sets.length - 1]?.reps);
 
                     const weightPlaceholder = (prevWeight && prevWeight > 0) ? String(prevWeight) : '--';
                     const repsPlaceholder = (prevReps && prevReps > 0) 
-                      ? (detail?.muscleGroup === 'Cardio' ? String(Math.floor(prevReps / 60)) : String(prevReps))
+                      ? (isTimeEx ? String(Math.floor(prevReps / 60)) : String(prevReps))
                       : getPlanReps();
 
                     return (
@@ -1946,10 +1954,10 @@ function ActiveWorkoutOverlay({
                          <div className="flex flex-col">
                            <input 
                              type="number"
-                             inputMode={detail?.muscleGroup === 'Cardio' ? 'decimal' : 'numeric'}
-                             value={detail?.muscleGroup === 'Cardio' ? (set.duration ? set.duration / 60 : '') : (set.reps || '')}
+                             inputMode={['Cardio', 'Lutas'].includes(detail?.muscleGroup || '') ? 'decimal' : 'numeric'}
+                             value={['Cardio', 'Lutas'].includes(detail?.muscleGroup || '') ? (set.duration ? set.duration / 60 : '') : (set.reps || '')}
                              onChange={(e) => {
-                               if (detail?.muscleGroup === 'Cardio') {
+                               if (['Cardio', 'Lutas'].includes(detail?.muscleGroup || '')) {
                                  updateSet(exIdx, setIdx, 'duration', (parseFloat(e.target.value) || 0) * 60);
                                } else {
                                  updateSet(exIdx, setIdx, 'reps', parseInt(e.target.value) || 0);
@@ -3111,7 +3119,7 @@ function ExerciciosView() {
     setNewExName('');
   };
 
-  const groups = ['Todos', 'Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core'];
+  const groups = ['Todos', 'Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core', 'Cardio', 'Lutas'];
 
   const filtered = exercises.filter(ex => {
     const matchesSearch = (ex.name || '').toLowerCase().includes((search || '').toLowerCase());
@@ -3198,7 +3206,7 @@ function ExerciciosView() {
                         onChange={(e) => setNewExGroup(e.target.value)}
                         className="w-full bg-black/40 border border-white/10 rounded-xl h-12 px-4 focus:border-brand-primary outline-none text-white text-sm appearance-none"
                       >
-                         {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core', 'Cardio'].map(g => (
+                         {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core', 'Cardio', 'Lutas'].map(g => (
                            <option key={g} value={g}>{g}</option>
                          ))}
                       </select>
