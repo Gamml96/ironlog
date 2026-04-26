@@ -111,6 +111,7 @@ export async function loginWithGoogle() {
         photoURL: user.photoURL || '',
         totalVolume: 0,
         totalWorkouts: 0,
+        showInRanking: true,
         lastActive: Date.now()
       });
     } else {

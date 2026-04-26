@@ -2070,6 +2070,7 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
   const [defaultIncrement, setDefaultIncrement] = useState(2.5);
   const [incrementInput, setIncrementInput] = useState('2.5');
   const [weeklyGoal, setWeeklyGoal] = useState(5);
+  const [showInRanking, setShowInRanking] = useState(true);
   const [displayName, setDisplayName] = useState(auth.currentUser?.displayName || '');
   const [profile, setProfile] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -2109,8 +2110,10 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
 
     const unsubProfile = onSnapshot(doc(db, 'users', auth.currentUser?.uid || ''), (snap) => {
       if (snap.exists()) {
-        setProfile(snap.data());
-        setDisplayName(snap.data().displayName);
+        const data = snap.data();
+        setProfile(data);
+        setDisplayName(data.displayName);
+        if (data.showInRanking !== undefined) setShowInRanking(data.showInRanking);
       }
     });
 
@@ -2131,8 +2134,13 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
         defaultWeightIncrement: numericIncrement,
         weeklyGoal: weeklyGoal
       });
-      if (displayName.trim() && auth.currentUser) {
-        await updateUserDisplayName(auth.currentUser.uid, displayName.trim());
+      if (auth.currentUser) {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        await updateDoc(userRef, {
+          displayName: displayName.trim(),
+          showInRanking: showInRanking,
+          lastActive: Date.now()
+        });
       }
       setHasChanges(false);
       // Optional: visual feedback
@@ -2267,6 +2275,28 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
            </div>
         </Card>
 
+        <Card className="space-y-4">
+           <div>
+              <div className="flex justify-between items-center">
+                 <div>
+                    <label className="text-xs uppercase text-muted font-bold block mb-1 tracking-widest">Participar do Ranking</label>
+                    <p className="text-[10px] text-gray-500 uppercase font-black tracking-tight leading-tight">
+                       Seu nome e volume aparecerão no ranking global
+                    </p>
+                 </div>
+                 <button 
+                   onClick={() => {
+                     setShowInRanking(!showInRanking);
+                     setHasChanges(true);
+                   }}
+                   className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${showInRanking ? 'bg-brand-primary' : 'bg-white/10'}`}
+                 >
+                    <div className={`w-4 h-4 bg-white rounded-full transition-transform duration-200 ${showInRanking ? 'translate-x-6' : 'translate-x-0'}`} />
+                 </button>
+              </div>
+           </div>
+        </Card>
+
         {isInstallable && (
           <Card className="border-brand-primary/20 bg-brand-primary/5">
              <div className="flex justify-between items-center">
@@ -2379,7 +2409,9 @@ function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
     );
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
-      let data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() as any }));
+      let data = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() as any }))
+        .filter(user => user.showInRanking !== false); // Default to true if missing
       
       const currentId = periodIds[range as keyof typeof periodIds];
 
