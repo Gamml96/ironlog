@@ -85,6 +85,24 @@ export interface Group {
   rankingType: 'workouts' | 'frequency';
 }
 
+export interface GroupPost {
+  id: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  type: 'text' | 'workout';
+  content?: string;
+  workoutData?: WorkoutSession;
+  likes: string[];
+  comments: {
+    userId: string;
+    userName: string;
+    text: string;
+    timestamp: number;
+  }[];
+  createdAt: number;
+}
+
 export interface GroupMemberStats {
   userId: string;
   displayName: string;

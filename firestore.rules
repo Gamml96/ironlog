@@ -65,7 +65,24 @@ service cloud.firestore {
       );
       allow delete: if isAuthenticated() && resource.data.creatorId == request.auth.uid;
     }
-
+    
+    match /groups/{groupId}/feed/{postId} {
+      allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds;
+      allow create: if isAuthenticated() && 
+                      request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds &&
+                      request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+                      request.auth.uid in get(/databases/$(database)/documents/groups/$(groupId)).data.memberIds &&
+                      (
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes']) ||
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['comments']) ||
+                        resource.data.userId == request.auth.uid
+                      );
+      allow delete: if isAuthenticated() && 
+                      (resource.data.userId == request.auth.uid || 
+                       get(/databases/$(database)/documents/groups/$(groupId)).data.creatorId == request.auth.uid);
+    }
+    
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isOwner(userId) && request.resource.data.uid == request.auth.uid && isValidUser(request.resource.data);

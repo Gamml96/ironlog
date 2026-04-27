@@ -31,7 +31,10 @@ import {
   Users,
   Copy,
   LogOut,
-  UserPlus
+  UserPlus,
+  Heart,
+  MessageSquare,
+  Share2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfWeek, endOfWeek, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
@@ -51,7 +54,8 @@ import {
   SetLog,
   DEFAULT_EXERCISES,
   Group,
-  GroupMemberStats
+  GroupMemberStats,
+  GroupPost
 } from './lib/db';
 import { 
   auth, 
@@ -71,15 +75,15 @@ import {
   limit,
   onSnapshot,
   doc,
+  setDoc,
+  arrayUnion,
+  arrayRemove,
+  updateDoc,
   updateUserDisplayName,
   where,
   logWeight,
   deleteSession,
-  updatePersonalRecords,
-  arrayUnion,
-  arrayRemove,
-  setDoc,
-  updateDoc
+  updatePersonalRecords
 } from './lib/firebase';
 import { PersonalRecord } from './lib/db';
 
@@ -230,6 +234,8 @@ export default function App() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState(false);
   const [weightIncrement, setWeightIncrement] = useState(2.5);
+  const [userGroups, setUserGroups] = useState<Group[]>([]);
+  const [recentlyFinishedWorkout, setRecentlyFinishedWorkout] = useState<WorkoutSession | null>(null);
 
   // --- PWA Install Logic ---
   useEffect(() => {
@@ -342,6 +348,18 @@ export default function App() {
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setUserGroups([]);
+      return;
+    }
+    const q = query(collection(db, 'groups'), where('memberIds', 'array-contains', user.uid));
+    const unsub = onSnapshot(q, (snap) => {
+      setUserGroups(snap.docs.map(d => ({ id: d.id, ...d.data() } as Group)));
+    });
+    return () => unsub();
+  }, [user]);
 
   // Global settings listener
   useEffect(() => {
@@ -469,6 +487,16 @@ export default function App() {
         </div>
       </nav>
 
+      {/* Share Workout Modal */}
+      {recentlyFinishedWorkout && (
+        <ShareWorkoutOverlay 
+          workout={recentlyFinishedWorkout}
+          groups={userGroups}
+          user={user!}
+          onClose={() => setRecentlyFinishedWorkout(null)}
+        />
+      )}
+
       {/* Workout Session Modal (if active) */}
       {activeWorkout && isWorkoutModalOpen && (
         <ActiveWorkoutOverlay 
@@ -493,6 +521,12 @@ export default function App() {
              }
 
              if (user) await updatePersonalRecords(user.uid, w);
+             
+             // Trigger share modal if user is in any groups
+             if (userGroups.length > 0) {
+               setRecentlyFinishedWorkout(w);
+             }
+
              localStorage.removeItem('ironlog_active_session');
              setActiveWorkout(null);
              closeWorkoutLayer();
@@ -1488,6 +1522,120 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
            )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ShareWorkoutOverlay({ 
+  workout, 
+  groups, 
+  user,
+  onClose 
+}: { 
+  workout: WorkoutSession, 
+  groups: Group[], 
+  user: FirebaseUser,
+  onClose: () => void 
+}) {
+  const [selectedGroups, setSelectedGroups] = useState<string[]>(groups.map(g => g.id));
+  const [comment, setComment] = useState('');
+  const [isSharing, setIsSharing] = useState(false);
+
+  const handleShare = async () => {
+    setIsSharing(true);
+    try {
+      await Promise.all(selectedGroups.map(async (groupId) => {
+        const postRef = doc(collection(db, 'groups', groupId, 'feed'));
+        await setDoc(postRef, {
+          id: postRef.id,
+          userId: user.uid,
+          userName: user.displayName || 'Atleta',
+          userPhoto: user.photoURL,
+          type: 'workout',
+          content: comment.trim(),
+          workoutData: workout,
+          likes: [],
+          comments: [],
+          createdAt: Date.now()
+        });
+      }));
+      onClose();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
+       <Card className="w-full max-w-sm space-y-6 border-brand-primary/20 bg-bg-card shadow-2xl overflow-hidden p-0">
+          <div className="bg-brand-primary/10 p-6 flex items-center gap-4">
+             <div className="w-12 h-12 bg-brand-primary text-black rounded-xl flex items-center justify-center shadow-lg rotate-3 shrink-0">
+                <Share2 size={24} />
+             </div>
+             <div>
+                <h2 className="text-xl font-black italic uppercase italic">Compartilhar Treino</h2>
+                <p className="text-[10px] font-bold text-brand-primary uppercase tracking-[0.1em]">Espalhe a motivação nos seus grupos!</p>
+             </div>
+          </div>
+
+          <div className="p-6 space-y-6">
+            <div className="bg-black/40 border border-white/5 rounded-2xl p-4 space-y-2">
+               <h3 className="text-xs font-black italic uppercase text-gray-400">{workout.workoutPlanName}</h3>
+               <p className="text-xl font-black italic text-brand-primary leading-none uppercase">{workout.totalVolume.toLocaleString('pt-BR')}kg Arrecadados</p>
+               <p className="text-[8px] font-bold text-muted uppercase tracking-widest">{workout.exercises.length} Exercícios • {Math.floor((workout.duration || 0)/60)} min</p>
+            </div>
+
+            <div className="space-y-3">
+               <label className="text-[10px] font-black uppercase text-muted tracking-widest pl-1">Escolher Grupos</label>
+               <div className="max-h-32 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                  {groups.map(group => (
+                    <div 
+                      key={group.id} 
+                      onClick={() => {
+                        if (selectedGroups.includes(group.id)) {
+                          setSelectedGroups(selectedGroups.filter(id => id !== group.id));
+                        } else {
+                          setSelectedGroups([...selectedGroups, group.id]);
+                        }
+                      }}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition-all cursor-pointer ${selectedGroups.includes(group.id) ? 'bg-brand-primary/10 border-brand-primary/50' : 'bg-white/5 border-white/5 opacity-60'}`}
+                    >
+                      <span className="text-xs font-bold uppercase truncate pr-2">{group.name}</span>
+                      <div className={`w-5 h-5 rounded-md flex items-center justify-center transition-all shrink-0 ${selectedGroups.includes(group.id) ? 'bg-brand-primary text-black' : 'border border-white/20'}`}>
+                         {selectedGroups.includes(group.id) && <Check size={14} strokeWidth={4} />}
+                      </div>
+                    </div>
+                  ))}
+               </div>
+            </div>
+
+            <div className="space-y-2">
+               <label className="text-[10px] font-black uppercase text-muted tracking-widest pl-1">Recado (opcional)</label>
+               <input 
+                 type="text" 
+                 placeholder="Ex: Treino insano hoje! 🔥"
+                 value={comment}
+                 onChange={(e) => setComment(e.target.value)}
+                 className="w-full bg-black/40 border border-white/10 rounded-xl px-4 h-12 text-xs font-bold text-white focus:border-brand-primary outline-none transition-all"
+               />
+            </div>
+
+            <div className="flex flex-col gap-2 pt-2">
+               <Button 
+                variant="primary" 
+                className="w-full h-14 text-sm font-black italic uppercase" 
+                onClick={handleShare}
+                disabled={selectedGroups.length === 0 || isSharing}
+                loading={isSharing}
+               >
+                 Compartilhar
+               </Button>
+               <Button variant="ghost" className="w-full" onClick={onClose} disabled={isSharing}>Agora não</Button>
+            </div>
+          </div>
+       </Card>
     </div>
   );
 }
@@ -2892,6 +3040,7 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
   const [copied, setCopied] = useState(false);
   const [challengeStats, setChallengeStats] = useState<Record<string, number>>({});
   const [showConfig, setShowConfig] = useState(false);
+  const [activeTab, setActiveTab] = useState<'leaderboard' | 'feed'>('leaderboard');
   const [sDate, setSDate] = useState(group.startDate ? new Date(group.startDate).toISOString().split('T')[0] : '');
   const [eDate, setEDate] = useState(group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '');
 
@@ -3027,6 +3176,21 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
         </div>
       </header>
 
+      <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5 mx-1">
+        <button 
+          onClick={() => setActiveTab('leaderboard')}
+          className={`flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'leaderboard' ? 'bg-brand-primary text-black' : 'text-muted hover:text-white'}`}
+        >
+          Leaderboard
+        </button>
+        <button 
+          onClick={() => setActiveTab('feed')}
+          className={`flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'feed' ? 'bg-brand-primary text-black' : 'text-muted hover:text-white'}`}
+        >
+          Feed do Grupo
+        </button>
+      </div>
+
       {showConfig && (
         <Card className="bg-brand-secondary/50 border-brand-primary/20 animate-in fade-in slide-in-from-top-4">
           <h3 className="font-black italic uppercase text-sm mb-4">Configurar Desafio</h3>
@@ -3059,53 +3223,199 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
         </Card>
       )}
 
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
-        </div>
+      {activeTab === 'leaderboard' ? (
+        loading ? (
+          <div className="flex justify-center py-20">
+            <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+             {sortedMembers.map((member, idx) => (
+               <Card 
+                 key={member.uid} 
+                 className={`flex items-center gap-4 transition-all ${member.uid === currentUser.uid ? 'border-brand-primary bg-brand-primary/5 shadow-[0_0_20px_rgba(255,94,26,0.05)]' : 'border-white/5 opacity-80'}`}
+               >
+                  <div className="w-6 text-center font-black italic text-gray-700">
+                     #{idx + 1}
+                  </div>
+                  <img 
+                    src={member.photoURL || `https://picsum.photos/seed/${member.uid}/100/100`} 
+                    alt="" 
+                    className={`w-10 h-10 rounded-xl border ${member.uid === currentUser.uid ? 'border-brand-primary' : 'border-white/10'}`} 
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="flex-1 min-w-0">
+                     <div className="flex items-center gap-1.5">
+                        <h4 className="font-bold text-sm truncate uppercase tracking-tight">{member.displayName}</h4>
+                        {member.uid === group.creatorId && <div className="p-0.5" title="Criador do Grupo"><Trophy size={10} className="text-yellow-500" /></div>}
+                     </div>
+                     <div className="flex items-center gap-2">
+                        <p className="text-[10px] text-brand-primary font-bold uppercase">
+                          {group.rankingType === 'frequency' ? 'Frequência Base' : 'Treinos Realizados'}
+                        </p>
+                     </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                     <div className="flex flex-col items-end">
+                        <p className="text-[14px] text-brand-primary font-black uppercase leading-none tracking-tighter">
+                          { (group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0) } <span className="text-[8px] opacity-70">pts</span>
+                        </p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <Flame size={10} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
+                          <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{member.streak || 0}d</p>
+                        </div>
+                     </div>
+                  </div>
+               </Card>
+             ))}
+          </div>
+        )
       ) : (
-        <div className="space-y-3">
-           {sortedMembers.map((member, idx) => (
-             <Card 
-               key={member.uid} 
-               className={`flex items-center gap-4 transition-all ${member.uid === currentUser.uid ? 'border-brand-primary bg-brand-primary/5 shadow-[0_0_20px_rgba(255,94,26,0.05)]' : 'border-white/5 opacity-80'}`}
-             >
-                <div className="w-6 text-center font-black italic text-gray-700">
-                   #{idx + 1}
-                </div>
-                <img 
-                  src={member.photoURL || `https://picsum.photos/seed/${member.uid}/100/100`} 
-                  alt="" 
-                  className={`w-10 h-10 rounded-xl border ${member.uid === currentUser.uid ? 'border-brand-primary' : 'border-white/10'}`} 
-                  referrerPolicy="no-referrer"
-                />
-                <div className="flex-1 min-w-0">
-                   <div className="flex items-center gap-1.5">
-                      <h4 className="font-bold text-sm truncate uppercase tracking-tight">{member.displayName}</h4>
-                      {member.uid === group.creatorId && <div className="p-0.5" title="Criador do Grupo"><Trophy size={10} className="text-yellow-500" /></div>}
-                   </div>
-                   <div className="flex items-center gap-2">
-                      <p className="text-[10px] text-brand-primary font-bold uppercase">
-                        {group.rankingType === 'frequency' ? 'Frequência Base' : 'Treinos Realizados'}
-                      </p>
-                   </div>
-                </div>
-                <div className="text-right shrink-0">
-                   <div className="flex flex-col items-end">
-                      <p className="text-[14px] text-brand-primary font-black uppercase leading-none tracking-tighter">
-                        { (group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0) } <span className="text-[8px] opacity-70">pts</span>
-                      </p>
-                      <div className="flex items-center gap-1 mt-1">
-                        <Flame size={10} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
-                        <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{member.streak || 0}d</p>
-                      </div>
-                   </div>
-                </div>
-             </Card>
-           ))}
-        </div>
+        <GroupFeedView group={group} currentUser={currentUser} />
       )}
     </motion.div>
+  );
+}
+
+function GroupFeedView({ group, currentUser }: { group: Group, currentUser: FirebaseUser }) {
+  const [posts, setPosts] = useState<GroupPost[]>([]);
+  const [postText, setPostText] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'groups', group.id, 'feed'),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+    const unsub = onSnapshot(q, (snap) => {
+      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GroupPost)));
+    });
+    return () => unsub();
+  }, [group.id]);
+
+  const handlePost = async () => {
+    if (!postText.trim()) return;
+    setIsPosting(true);
+    try {
+      const postRef = doc(collection(db, 'groups', group.id, 'feed'));
+      await setDoc(postRef, {
+        id: postRef.id,
+        userId: currentUser.uid,
+        userName: currentUser.displayName || 'Atleta',
+        userPhoto: currentUser.photoURL,
+        type: 'text',
+        content: postText.trim(),
+        likes: [],
+        comments: [],
+        createdAt: Date.now()
+      });
+      setPostText('');
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  const handleLike = async (post: GroupPost) => {
+    const ref = doc(db, 'groups', group.id, 'feed', post.id);
+    if (post.likes.includes(currentUser.uid)) {
+      await updateDoc(ref, { likes: arrayRemove(currentUser.uid) });
+    } else {
+      await updateDoc(ref, { likes: arrayUnion(currentUser.uid) });
+    }
+  };
+
+  return (
+    <div className="space-y-6 pb-20 mt-2">
+      <div className="bg-bg-card rounded-2xl p-4 border border-white/5 space-y-3">
+        <textarea
+          placeholder="Como foi o treino hoje?"
+          value={postText}
+          onChange={(e) => setPostText(e.target.value)}
+          className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-[12px] font-bold text-white focus:border-brand-primary outline-none transition-all resize-none h-24"
+        />
+        <div className="flex justify-end">
+          <Button 
+            size="sm" 
+            disabled={!postText.trim() || isPosting} 
+            loading={isPosting}
+            onClick={handlePost}
+            className="text-[10px] uppercase font-black px-6"
+          >
+            Publicar
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {posts.length === 0 && (
+          <div className="text-center py-10">
+            <p className="text-muted text-[10px] font-bold uppercase tracking-widest">Nenhuma publicação ainda. Seja o primeiro!</p>
+          </div>
+        )}
+        {posts.map(post => (
+          <Card key={post.id} className="space-y-4 border-white/5">
+            <div className="flex items-center gap-3">
+              <img 
+                src={post.userPhoto || `https://picsum.photos/seed/${post.userId}/100/100`} 
+                alt="" 
+                className="w-8 h-8 rounded-lg border border-white/10"
+                referrerPolicy="no-referrer"
+              />
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-[12px] truncate uppercase tracking-tight">{post.userName}</h4>
+                <p className="text-[8px] text-muted font-black uppercase tracking-widest">
+                  {formatDistanceToNow(post.createdAt, { addSuffix: true, locale: ptBR })}
+                </p>
+              </div>
+            </div>
+
+            {post.type === 'text' && (
+              <p className="text-sm text-gray-300 font-medium leading-relaxed">{post.content}</p>
+            )}
+
+            {post.type === 'workout' && post.workoutData && (
+              <div className="bg-black/40 border border-white/5 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-brand-primary/10 rounded-full flex items-center justify-center text-brand-primary">
+                      <Trophy size={16} />
+                    </div>
+                    <div>
+                      <h5 className="text-[10px] font-black italic uppercase text-white">{post.workoutData.workoutPlanName}</h5>
+                      <p className="text-[8px] font-bold text-brand-primary uppercase tracking-widest">Treino Concluído</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[12px] font-black italic text-brand-primary leading-none">{post.workoutData.totalVolume.toLocaleString('pt-BR')}kg</p>
+                    <p className="text-[8px] font-bold text-muted uppercase tracking-widest mt-1">Volume Total</p>
+                  </div>
+                </div>
+                {post.content && (
+                  <p className="text-xs text-muted font-medium border-t border-white/5 pt-2 italic">"{post.content}"</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center gap-4 pt-2 border-t border-white/5">
+              <button 
+                onClick={() => handleLike(post)}
+                className={`flex items-center gap-1.5 transition-colors ${post.likes.includes(currentUser.uid) ? 'text-brand-primary' : 'text-muted hover:text-white'}`}
+              >
+                <Heart size={16} fill={post.likes.includes(currentUser.uid) ? "currentColor" : "none"} />
+                <span className="text-[10px] font-black">{post.likes.length}</span>
+              </button>
+              <div className="flex items-center gap-1.5 text-muted">
+                <MessageSquare size={16} />
+                <span className="text-[10px] font-black">{post.comments ? post.comments.length : 0}</span>
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }
 

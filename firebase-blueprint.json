@@ -61,12 +61,34 @@
         "createdAt": { "type": "number" }
       },
       "required": ["id", "name", "inviteCode", "creatorId", "memberIds", "createdAt"]
+    },
+    "GroupPost": {
+      "title": "GroupPost",
+      "description": "Post in a group feed",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "type": { "type": "string", "enum": ["text", "workout"] },
+        "content": { "type": "string" },
+        "workoutData": { "type": "object" },
+        "likes": { "type": "array" },
+        "comments": { "type": "array" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "userName", "type", "createdAt"]
     }
   },
   "firestore": {
     "/groups/{groupId}": {
       "schema": "Group",
       "description": "Private groups for specific user competitions"
+    },
+    "/groups/{groupId}/feed/{postId}": {
+      "schema": "GroupPost",
+      "description": "Feed posts within a group"
     },
     "/users/{userId}/weight_history/{recordId}": {
       "schema": "WeightRecord",
