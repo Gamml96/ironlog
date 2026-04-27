@@ -37,10 +37,7 @@ import {
   Share2,
   Camera,
   Image as ImageIcon,
-  MoreVertical,
-  Trash2,
-  Edit2,
-  Check
+  Send
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfWeek, endOfWeek, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
@@ -3127,7 +3124,6 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
   const [copied, setCopied] = useState(false);
   const [challengeStats, setChallengeStats] = useState<Record<string, number>>({});
   const [showConfig, setShowConfig] = useState(false);
-  const [activeTab, setActiveTab] = useState<'leaderboard' | 'feed'>('leaderboard');
   const [sDate, setSDate] = useState(group.startDate ? new Date(group.startDate).toISOString().split('T')[0] : '');
   const [eDate, setEDate] = useState(group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '');
 
@@ -3223,60 +3219,65 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
 
   return (
     <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="py-4 space-y-6">
-      <header className="space-y-4">
+      <header className="space-y-6">
         <div className="flex justify-between items-center">
-           <Button variant="ghost" size="icon" onClick={onBack} className="w-10 h-10"><ChevronLeft /></Button>
+           <button 
+            onClick={onBack} 
+            className="w-10 h-10 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-muted hover:text-white hover:bg-white/10 transition-all active:scale-95 shadow-lg"
+           >
+            <ChevronLeft size={20} />
+           </button>
+           
            <div className="flex gap-2">
               <button 
                 onClick={copyInvite}
-                className={`h-10 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all ${copied ? 'bg-green-500 text-black' : 'bg-white/5 text-muted border border-white/10 hover:bg-white/10'}`}
+                className={`h-10 px-4 rounded-full flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all shadow-lg active:scale-95 ${copied ? 'bg-green-500 text-black' : 'bg-white/5 text-muted border border-white/10 hover:bg-white/10'}`}
               >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? <Check size={14} strokeWidth={3} /> : <UserPlus size={14} className="text-brand-primary" />}
                 {copied ? 'Copiado!' : group.inviteCode}
               </button>
-              <Button variant="danger" size="icon" onClick={leaveGroup} className="w-10 h-10 border-none bg-transparent hover:bg-red-500/10"><LogOut size={18} /></Button>
-               {currentUser.uid === group.creatorId && (
-                 <Button variant="ghost" size="icon" onClick={() => setShowConfig(!showConfig)} className="ml-2 w-10 h-10 bg-white/5 border border-white/10"><Calendar size={18} className="text-brand-primary" /></Button>
-               )}
+
+              <div className="flex bg-white/5 rounded-full p-1 border border-white/5 shadow-lg">
+                {currentUser.uid === group.creatorId && (
+                   <button 
+                    onClick={() => setShowConfig(!showConfig)} 
+                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${showConfig ? 'bg-brand-primary text-black' : 'text-brand-primary hover:bg-brand-primary/10'}`}
+                   >
+                    <Calendar size={16} />
+                   </button>
+                )}
+                <button 
+                  onClick={leaveGroup} 
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-red-500 hover:bg-red-500/10 transition-all"
+                >
+                  <LogOut size={16} />
+                </button>
+              </div>
            </div>
         </div>
-        <div>
-           <h1 className="text-3xl font-black italic uppercase leading-none">{group.name}</h1>
+
+        <div className="px-2">
+           <h1 className="text-4xl font-black italic uppercase leading-[0.9] tracking-tighter text-white drop-shadow-xl">{group.name}</h1>
            {group.startDate && group.endDate ? (
-             <div className="mt-3 space-y-2">
-               <div className="flex items-center gap-2 bg-brand-primary/10 border border-brand-primary/20 p-2 rounded-xl">
-                 <Calendar size={14} className="text-brand-primary" />
-                 <p className="text-[10px] font-black uppercase tracking-wider text-brand-primary">
-                   Período: {new Date(group.startDate).toLocaleDateString()} - {new Date(group.endDate).toLocaleDateString()}
+             <div className="mt-4 flex flex-wrap gap-2">
+               <div className="flex items-center gap-2 bg-brand-primary/10 border border-brand-primary/20 px-3 py-1.5 rounded-full shadow-sm">
+                 <Calendar size={12} className="text-brand-primary" />
+                 <p className="text-[9px] font-black uppercase tracking-wider text-brand-primary">
+                   Até {new Date(group.endDate).toLocaleDateString()}
                  </p>
                </div>
-               <div className="flex items-center gap-2 bg-white/5 border border-white/10 p-2 rounded-xl">
-                 {group.rankingType === 'workouts' ? <Trophy size={14} className="text-brand-secondary" /> : <Flame size={14} className="text-brand-secondary" />}
-                 <p className="text-[10px] font-black uppercase tracking-wider text-muted">
-                   Modalidade: {group.rankingType === 'workouts' ? 'Máximo de Treinos' : 'Dias Treinados (Frequência)'}
+               <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full">
+                 <Trophy size={12} className="text-brand-secondary" />
+                 <p className="text-[9px] font-black uppercase tracking-wider text-muted">
+                    {group.rankingType === 'workouts' ? 'Volume Treinos' : 'Frequência'}
                  </p>
                </div>
              </div>
            ) : (
-             <p className="text-[10px] text-muted font-bold uppercase tracking-[0.2em] mt-2">Leaderboard do Grupo</p>
+             <p className="text-[10px] text-muted/60 font-black uppercase tracking-[0.2em] mt-3 ml-1">Comunidade Atleta</p>
            )}
         </div>
       </header>
-
-      <div className="flex gap-2 bg-white/5 p-1 rounded-2xl border border-white/5 mx-1">
-        <button 
-          onClick={() => setActiveTab('leaderboard')}
-          className={`flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'leaderboard' ? 'bg-brand-primary text-black' : 'text-muted hover:text-white'}`}
-        >
-          Leaderboard
-        </button>
-        <button 
-          onClick={() => setActiveTab('feed')}
-          className={`flex-1 h-10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'feed' ? 'bg-brand-primary text-black' : 'text-muted hover:text-white'}`}
-        >
-          Feed do Grupo
-        </button>
-      </div>
 
       {showConfig && (
         <Card className="bg-brand-secondary/50 border-brand-primary/20 animate-in fade-in slide-in-from-top-4">
@@ -3310,55 +3311,155 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
         </Card>
       )}
 
-      {activeTab === 'leaderboard' ? (
-        loading ? (
-          <div className="flex justify-center py-20">
-            <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
-          </div>
-        ) : (
-          <div className="space-y-3">
-             {sortedMembers.map((member, idx) => (
-               <Card 
-                 key={member.uid} 
-                 className={`flex items-center gap-4 transition-all ${member.uid === currentUser.uid ? 'border-brand-primary bg-brand-primary/5 shadow-[0_0_20px_rgba(255,94,26,0.05)]' : 'border-white/5 opacity-80'}`}
-               >
-                  <div className="w-6 text-center font-black italic text-gray-700">
-                     #{idx + 1}
-                  </div>
-                  <img 
-                    src={member.photoURL || `https://picsum.photos/seed/${member.uid}/100/100`} 
-                    alt="" 
-                    className={`w-10 h-10 rounded-xl border ${member.uid === currentUser.uid ? 'border-brand-primary' : 'border-white/10'}`} 
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="flex-1 min-w-0">
-                     <div className="flex items-center gap-1.5">
-                        <h4 className="font-bold text-sm truncate uppercase tracking-tight">{member.displayName}</h4>
-                        {member.uid === group.creatorId && <div className="p-0.5" title="Criador do Grupo"><Trophy size={10} className="text-yellow-500" /></div>}
-                     </div>
-                     <div className="flex items-center gap-2">
-                        <p className="text-[10px] text-brand-primary font-bold uppercase">
-                          {group.rankingType === 'frequency' ? 'Frequência Base' : 'Treinos Realizados'}
-                        </p>
-                     </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                     <div className="flex flex-col items-end">
-                        <p className="text-[14px] text-brand-primary font-black uppercase leading-none tracking-tighter">
-                          { (group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0) } <span className="text-[8px] opacity-70">pts</span>
-                        </p>
-                        <div className="flex items-center gap-1 mt-1">
-                          <Flame size={10} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
-                          <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{member.streak || 0}d</p>
-                        </div>
-                     </div>
-                  </div>
-               </Card>
-             ))}
-          </div>
-        )
+      {loading ? (
+        <div className="flex justify-center py-20">
+          <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
+        </div>
       ) : (
-        <GroupFeedView group={group} currentUser={currentUser} />
+        <div className="space-y-10">
+          {/* Ranking Section */}
+          <section className="space-y-4">
+             <div className="flex items-center gap-2 px-2">
+                <Trophy size={16} className="text-yellow-500" />
+                <h2 className="text-[12px] font-black uppercase tracking-[0.2em] text-white/50 italic">Classificação</h2>
+             </div>
+             <div className="space-y-6">
+                {/* Podium for Top 3 */}
+                {sortedMembers.length > 0 && (
+                  <div className="flex items-end justify-center gap-2 pt-8 pb-4 mb-4">
+                    {/* 2nd Place */}
+                    {sortedMembers[1] && (
+                      <div className="flex flex-col items-center gap-2 w-1/3">
+                        <div className="relative group">
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gray-400 text-black px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg z-10">#2</div>
+                          <img 
+                            src={sortedMembers[1].photoURL || `https://picsum.photos/seed/${sortedMembers[1].uid}/100/100`} 
+                            alt="" 
+                            className="w-14 h-14 rounded-2xl border-2 border-gray-400/30 object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[10px] font-bold uppercase truncate max-w-[80px]">{sortedMembers[1].displayName}</p>
+                          <p className="text-[12px] font-black text-gray-400">{(group.startDate && group.endDate) ? (challengeStats[sortedMembers[1].uid] || 0) : (sortedMembers[1].totalWorkouts || 0)} <span className="text-[8px] opacity-70">pts</span></p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 1st Place */}
+                    {sortedMembers[0] && (
+                      <div className="flex flex-col items-center gap-3 w-1/3 -mt-4">
+                        <div className="relative group">
+                          <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-500 animate-bounce">
+                            <Trophy size={20} fill="currentColor" />
+                          </div>
+                          <div className="absolute -inset-1 bg-yellow-500/20 blur-lg rounded-full animate-pulse"></div>
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-500 text-black px-2 py-0.5 rounded text-[9px] font-black uppercase italic shadow-xl z-10 border-b border-black/10">#1</div>
+                          <img 
+                            src={sortedMembers[0].photoURL || `https://picsum.photos/seed/${sortedMembers[0].uid}/100/100`} 
+                            alt="" 
+                            className="w-20 h-20 rounded-[2rem] border-4 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.2)] object-cover relative z-1"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[11px] font-black uppercase tracking-tight truncate max-w-[100px] text-yellow-500">{sortedMembers[0].displayName}</p>
+                          <p className="text-[16px] font-black italic text-brand-primary">{(group.startDate && group.endDate) ? (challengeStats[sortedMembers[0].uid] || 0) : (sortedMembers[0].totalWorkouts || 0)} <span className="text-[10px] opacity-70">pts</span></p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 3rd Place */}
+                    {sortedMembers[2] && (
+                      <div className="flex flex-col items-center gap-2 w-1/3">
+                        <div className="relative group">
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-700/80 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic z-10 shadow-lg">#3</div>
+                          <img 
+                            src={sortedMembers[2].photoURL || `https://picsum.photos/seed/${sortedMembers[2].uid}/100/100`} 
+                            alt="" 
+                            className="w-14 h-14 rounded-2xl border-2 border-orange-700/30 object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[10px] font-bold uppercase truncate max-w-[80px]">{sortedMembers[2].displayName}</p>
+                          <p className="text-[12px] font-black text-orange-700">{(group.startDate && group.endDate) ? (challengeStats[sortedMembers[2].uid] || 0) : (sortedMembers[2].totalWorkouts || 0)} <span className="text-[8px] opacity-70">pts</span></p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* List for 4th and beyond */}
+                <div className="space-y-2">
+                  {sortedMembers.map((member, idx) => {
+                    // Skip top 3
+                    if (idx < 3) return null;
+                    
+                    return (
+                      <Card 
+                        key={member.uid} 
+                        className={`flex items-center gap-4 transition-all py-3 ${member.uid === currentUser.uid ? 'border-brand-primary bg-brand-primary/5' : 'border-white/5 opacity-90'}`}
+                      >
+                        <div className="w-6 text-center font-black italic text-gray-700 text-xs">
+                          #{idx + 1}
+                        </div>
+                        <img 
+                          src={member.photoURL || `https://picsum.photos/seed/${member.uid}/100/100`} 
+                          alt="" 
+                          className={`w-10 h-10 rounded-xl border ${member.uid === currentUser.uid ? 'border-brand-primary' : 'border-white/10'}`} 
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-sm truncate uppercase tracking-tight leading-tight">{member.displayName}</h4>
+                          <p className="text-[8px] text-muted font-bold uppercase tracking-widest mt-0.5 opacity-60">
+                            {group.rankingType === 'frequency' ? 'Frequência' : 'Treinos'}
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-[14px] text-brand-primary font-black uppercase leading-none tracking-tighter">
+                            { (group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0) } <span className="text-[8px] opacity-70">pts</span>
+                          </p>
+                          <div className="flex items-center justify-end gap-1 mt-1">
+                            <Flame size={10} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
+                            <p className="text-[8px] text-gray-500 font-black uppercase tracking-tighter">{member.streak || 0}d</p>
+                          </div>
+                        </div>
+                      </Card>
+                    );
+                  })}
+                  
+                  {/* Current user context if not in podium or for reinforcement */}
+                  {sortedMembers.slice(0, 3).map((member, idx) => {
+                    if (member.uid !== currentUser.uid) return null;
+                    return (
+                      <div key="current-user-top" className="mt-4 p-4 rounded-2xl bg-brand-primary text-black border border-brand-primary shadow-[0_0_20px_rgba(255,94,26,0.1)]">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center font-black italic">#{idx + 1}</div>
+                          <div className="flex-1">
+                            <p className="text-[10px] font-black uppercase leading-none opacity-70">Sua Posição</p>
+                            <h4 className="font-black uppercase text-sm tracking-tight">Você está no pódio!</h4>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-black leading-none italic">{(group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0)} PTS</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+             </div>
+          </section>
+
+          {/* Feed Section */}
+          <section className="space-y-4">
+             <div className="flex items-center gap-2 px-2">
+                <MessageSquare size={16} className="text-brand-primary" />
+                <h2 className="text-[12px] font-black uppercase tracking-[0.2em] text-white/50 italic">Atividade Recente</h2>
+             </div>
+             <GroupFeedView group={group} currentUser={currentUser} />
+          </section>
+        </div>
       )}
     </motion.div>
   );
@@ -3366,13 +3467,10 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
 
 function GroupFeedView({ group, currentUser }: { group: Group, currentUser: FirebaseUser }) {
   const [posts, setPosts] = useState<GroupPost[]>([]);
-  const [postText, setPostText] = useState('');
-  const [isPosting, setIsPosting] = useState(false);
-  const [selectedImage, setSelectedImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [editingPostId, setEditingPostId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [openCommentsPostId, setOpenCommentsPostId] = useState<string | null>(null);
+  const [newCommentText, setNewCommentText] = useState('');
 
   useEffect(() => {
     const q = query(
@@ -3386,59 +3484,32 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
     return () => unsub();
   }, [group.id]);
 
-  const handlePost = async () => {
-    if (!postText.trim() && !selectedImage) return;
-    setIsPosting(true);
-    try {
-      let imageUrl = '';
-      if (selectedImage) {
-        const imagePath = `groups/${group.id}/feed/${currentUser.uid}/${Date.now()}_${selectedImage.name}`;
-        const storageRef = ref(storage, imagePath);
-        await uploadBytes(storageRef, selectedImage);
-        imageUrl = await getDownloadURL(storageRef);
-      }
-
-      const postRef = doc(collection(db, 'groups', group.id, 'feed'));
-      await setDoc(postRef, {
-        id: postRef.id,
-        userId: currentUser.uid,
-        userName: currentUser.displayName || 'Atleta',
-        userPhoto: currentUser.photoURL,
-        type: 'text',
-        content: postText.trim(),
-        imageUrl: imageUrl,
-        likes: [],
-        comments: [],
-        createdAt: Date.now()
-      });
-      setPostText('');
-      setSelectedImage(null);
-      setImagePreview(null);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsPosting(false);
-    }
-  };
-
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   const handleLike = async (post: GroupPost) => {
     const ref = doc(db, 'groups', group.id, 'feed', post.id);
     if (post.likes.includes(currentUser.uid)) {
       await updateDoc(ref, { likes: arrayRemove(currentUser.uid) });
     } else {
       await updateDoc(ref, { likes: arrayUnion(currentUser.uid) });
+    }
+  };
+
+  const handleAddComment = async (post: GroupPost) => {
+    if (!newCommentText.trim()) return;
+    try {
+      const ref = doc(db, 'groups', group.id, 'feed', post.id);
+      const newComment = {
+        userId: currentUser.uid,
+        userName: currentUser.displayName || 'Atleta',
+        userPhoto: currentUser.photoURL,
+        text: newCommentText.trim(),
+        createdAt: Date.now()
+      };
+      await updateDoc(ref, {
+        comments: arrayUnion(newComment)
+      });
+      setNewCommentText('');
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -3473,182 +3544,190 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
 
   return (
     <div className="space-y-6 pb-20 mt-2">
-      <div className="bg-bg-card rounded-2xl p-4 border border-white/5 space-y-4">
-        <div className="space-y-2">
-          <textarea
-            placeholder="Como foi o treino hoje?"
-            value={postText}
-            onChange={(e) => setPostText(e.target.value)}
-            className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-[12px] font-bold text-white focus:border-brand-primary outline-none transition-all resize-none h-24"
-          />
-          
-          {imagePreview && (
-            <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-white/10">
-              <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-              <button 
-                onClick={() => {
-                  setSelectedImage(null);
-                  setImagePreview(null);
-                }}
-                className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
-                type="button"
-              >
-                <X size={16} />
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-between items-center px-1">
-          <div className="flex gap-4">
-            <button
-              type="button"
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.setAttribute('capture', 'environment');
-                  fileInputRef.current.click();
-                }
-              }}
-              className="flex items-center gap-2 text-muted hover:text-brand-primary transition-colors"
-            >
-              <Camera size={18} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Câmera</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (fileInputRef.current) {
-                  fileInputRef.current.removeAttribute('capture');
-                  fileInputRef.current.click();
-                }
-              }}
-              className="flex items-center gap-2 text-muted hover:text-brand-primary transition-colors"
-            >
-              <ImageIcon size={18} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Galeria</span>
-            </button>
-          </div>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            onChange={handleImageSelect} 
-            accept="image/*" 
-            className="hidden" 
-          />
-          
-          <Button 
-            size="sm" 
-            disabled={(!postText.trim() && !selectedImage) || isPosting} 
-            loading={isPosting}
-            onClick={handlePost}
-            className="text-[10px] uppercase font-black px-6"
-          >
-            Publicar
-          </Button>
-        </div>
-      </div>
-
-      <div className="space-y-4">
+      <div className="space-y-6">
         {posts.length === 0 && (
-          <div className="text-center py-10">
-            <p className="text-muted text-[10px] font-bold uppercase tracking-widest">Nenhuma publicação ainda. Seja o primeiro!</p>
+          <div className="text-center py-20 bg-white/5 rounded-3xl border border-dashed border-white/10">
+            <p className="text-muted text-[11px] font-black uppercase tracking-[0.2em] opacity-40">O silêncio do sucesso...</p>
+            <p className="text-[10px] text-muted/60 mt-2">Seja o primeiro a motivar o grupo!</p>
           </div>
         )}
         {posts.map(post => (
-          <Card key={post.id} className="space-y-4 border-white/5 relative group">
-            <div className="flex items-center gap-3">
-              <img 
-                src={post.userPhoto || `https://picsum.photos/seed/${post.userId}/100/100`} 
-                alt="" 
-                className="w-8 h-8 rounded-lg border border-white/10"
-                referrerPolicy="no-referrer"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-[12px] truncate uppercase tracking-tight">{post.userName}</h4>
-                  {(post.userId === currentUser.uid || group.creatorId === currentUser.uid) && (
-                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {post.userId === currentUser.uid && editingPostId !== post.id && (
-                        <button onClick={() => startEdit(post)} className="p-1 text-muted hover:text-white">
-                          <Edit2 size={12} />
+          <Card key={post.id} className="p-0 overflow-hidden border-white/5 relative group/post hover:border-brand-primary/20 transition-all duration-300">
+            <div className="p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <img 
+                    src={post.userPhoto || `https://picsum.photos/seed/${post.userId}/100/100`} 
+                    alt="" 
+                    className="w-10 h-10 rounded-2xl border border-white/10 object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-brand-primary rounded-full border-2 border-bg-card flex items-center justify-center">
+                    <Check size={8} strokeWidth={4} className="text-black" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-[13px] truncate uppercase tracking-tight leading-none">{post.userName}</h4>
+                    {(post.userId === currentUser.uid || group.creatorId === currentUser.uid) && (
+                      <div className="flex gap-2 opacity-0 group-hover/post:opacity-100 transition-opacity">
+                        {post.userId === currentUser.uid && editingPostId !== post.id && (
+                          <button onClick={() => startEdit(post)} className="p-1.5 text-muted hover:text-brand-primary transition-colors">
+                            <Edit2 size={14} />
+                          </button>
+                        )}
+                        <button onClick={() => handleDeletePost(post)} className="p-1.5 text-muted hover:text-red-500 transition-colors">
+                          <Trash2 size={14} />
                         </button>
-                      )}
-                      <button onClick={() => handleDeletePost(post)} className="p-1 text-muted hover:text-red-500">
-                        <Trash2 size={12} />
-                      </button>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[9px] text-muted/60 font-black uppercase tracking-[0.15em] mt-1">
+                    {formatDistanceToNow(post.createdAt, { addSuffix: true, locale: ptBR })}
+                  </p>
+                </div>
+              </div>
+
+              {editingPostId === post.id ? (
+                <div className="space-y-3 bg-black/20 p-4 rounded-2xl border border-brand-primary/20">
+                  <textarea
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-[13px] font-medium text-white outline-none h-24 focus:border-brand-primary transition-all resize-none"
+                    placeholder="Edite seu segredo do sucesso..."
+                  />
+                  <div className="flex justify-end gap-2">
+                     <button onClick={() => setEditingPostId(null)} className="text-[10px] font-black uppercase text-muted py-2 px-4 hover:text-white transition-colors">Cancelar</button>
+                     <button onClick={() => saveEdit(post)} className="text-[10px] font-black uppercase bg-brand-primary text-black py-2 px-6 rounded-xl hover:scale-105 active:scale-95 transition-all">Salvar</button>
+                  </div>
+                </div>
+              ) : (
+                post.type === 'text' && post.content && (
+                  <p className="text-sm text-gray-300 font-medium leading-relaxed px-1 whitespace-pre-wrap">{post.content}</p>
+                )
+              )}
+
+              {post.imageUrl && (
+                <div className="rounded-2xl overflow-hidden border border-white/5 w-full bg-black/20 shadow-inner group/img relative cursor-zoom-in">
+                  <img 
+                    src={post.imageUrl} 
+                    alt="Post content" 
+                    className="w-full h-auto max-h-[500px] object-cover transition-transform duration-700 hover:scale-105" 
+                    loading="lazy"
+                  />
+                </div>
+              )}
+
+              {post.type === 'workout' && post.workoutData && (
+                <div className="bg-gradient-to-br from-brand-primary/10 to-brand-primary/5 border border-brand-primary/20 rounded-3xl p-5 space-y-4 relative overflow-hidden group/workout shadow-lg">
+                  <div className="absolute -right-4 -bottom-4 text-brand-primary/5 group-hover:rotate-12 transition-transform duration-700">
+                    <Trophy size={100} />
+                  </div>
+                  <div className="flex items-center justify-between relative z-10">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-brand-primary text-black rounded-2xl flex items-center justify-center shadow-lg rotate-3 group-hover:rotate-0 transition-transform">
+                        <Flame size={20} fill="currentColor" />
+                      </div>
+                      <div>
+                        <h5 className="text-[12px] font-black italic uppercase text-white tracking-tight">{post.workoutData.workoutPlanName}</h5>
+                        <p className="text-[9px] font-extrabold text-brand-primary uppercase tracking-widest">Treino Finalizado</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[18px] font-black italic text-brand-primary leading-none tracking-tighter">{post.workoutData.totalVolume.toLocaleString('pt-BR')}kg</p>
+                      <p className="text-[9px] font-bold text-muted uppercase tracking-widest mt-1">Volume Total</p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 relative z-10 border-t border-white/5 pt-4">
+                    <div className="flex items-center gap-2">
+                       <Dumbbell size={14} className="text-muted" />
+                       <p className="text-[10px] font-bold uppercase text-gray-300">{post.workoutData.exercises.length} Exercícios</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       <Timer size={14} className="text-muted" />
+                       <p className="text-[10px] font-bold uppercase text-gray-300">{Math.floor((post.workoutData.duration || 0)/60)} Minutos</p>
+                    </div>
+                  </div>
+
+                  {post.content && post.type === 'workout' && !editingPostId && (
+                    <div className="relative z-10 bg-black/30 border border-white/5 rounded-2xl p-3 mt-2 italic shadow-inner">
+                      <p className="text-[13px] text-gray-300 font-medium">"{post.content}"</p>
                     </div>
                   )}
                 </div>
-                <p className="text-[8px] text-muted font-black uppercase tracking-widest">
-                  {formatDistanceToNow(post.createdAt, { addSuffix: true, locale: ptBR })}
-                </p>
-              </div>
-            </div>
+              )}
 
-            {editingPostId === post.id ? (
-              <div className="space-y-2">
-                <textarea
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="w-full bg-black/40 border border-brand-primary/50 rounded-xl p-3 text-[12px] font-bold text-white outline-none h-20"
-                />
-                <div className="flex justify-end gap-2">
-                   <button onClick={() => setEditingPostId(null)} className="text-[10px] font-black uppercase text-muted py-1 px-3">Cancelar</button>
-                   <button onClick={() => saveEdit(post)} className="text-[10px] font-black uppercase bg-brand-primary text-black py-1 px-4 rounded-lg">Salvar</button>
-                </div>
-              </div>
-            ) : (
-              post.type === 'text' && post.content && (
-                <p className="text-sm text-gray-300 font-medium leading-relaxed px-1">{post.content}</p>
-              )
-            )}
-
-            {post.imageUrl && (
-              <div className="rounded-xl overflow-hidden border border-white/5 w-full bg-black/20">
-                <img 
-                  src={post.imageUrl} 
-                  alt="Post content" 
-                  className="w-full h-auto max-h-[400px] object-contain" 
-                  loading="lazy"
-                />
-              </div>
-            )}
-
-            {post.type === 'workout' && post.workoutData && (
-              <div className="bg-black/40 border border-white/5 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-brand-primary/10 rounded-full flex items-center justify-center text-brand-primary">
-                      <Trophy size={16} />
-                    </div>
-                    <div>
-                      <h5 className="text-[10px] font-black italic uppercase text-white">{post.workoutData.workoutPlanName}</h5>
-                      <p className="text-[8px] font-bold text-brand-primary uppercase tracking-widest">Treino Concluído</p>
-                    </div>
+              <div className="flex items-center gap-6 pt-3 px-1">
+                <button 
+                  onClick={() => handleLike(post)}
+                  className={`flex items-center gap-2 transition-all active:scale-125 ${post.likes.includes(currentUser.uid) ? 'text-brand-primary' : 'text-muted hover:text-white'}`}
+                >
+                  <div className={`p-2 rounded-full transition-colors ${post.likes.includes(currentUser.uid) ? 'bg-brand-primary/10' : 'bg-white/5 group-hover/post:bg-white/10'}`}>
+                    <Heart size={18} fill={post.likes.includes(currentUser.uid) ? "currentColor" : "none"} strokeWidth={2.5} />
                   </div>
-                  <div className="text-right">
-                    <p className="text-[12px] font-black italic text-brand-primary leading-none">{post.workoutData.totalVolume.toLocaleString('pt-BR')}kg</p>
-                    <p className="text-[8px] font-bold text-muted uppercase tracking-widest mt-1">Volume Total</p>
+                  <span className="text-[11px] font-black tabular-nums">{post.likes.length}</span>
+                </button>
+                <button 
+                  onClick={() => setOpenCommentsPostId(openCommentsPostId === post.id ? null : post.id)}
+                  className={`flex items-center gap-2 transition-all ${openCommentsPostId === post.id ? 'text-brand-primary' : 'text-muted hover:text-white'}`}
+                >
+                  <div className={`p-2 rounded-full transition-colors ${openCommentsPostId === post.id ? 'bg-brand-primary/10' : 'bg-white/5 group-hover/post:bg-white/10'}`}>
+                    <MessageSquare size={18} strokeWidth={2.5} />
                   </div>
-                </div>
-                {post.content && (
-                  <p className="text-xs text-muted font-medium border-t border-white/5 pt-2 italic">"{post.content}"</p>
+                  <span className="text-[11px] font-black">{post.comments ? post.comments.length : 0}</span>
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {openCommentsPostId === post.id && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }} 
+                    animate={{ height: 'auto', opacity: 1 }} 
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden border-t border-white/5 mt-2"
+                  >
+                    <div className="py-4 space-y-4">
+                      {post.comments && post.comments.length > 0 ? (
+                        <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+                           {post.comments.sort((a,b) => a.createdAt - b.createdAt).map((comm, idx) => (
+                             <div key={idx} className="flex gap-2">
+                                <img src={comm.userPhoto || `https://picsum.photos/seed/${comm.userId}/100/100`} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0" referrerPolicy="no-referrer" />
+                                <div className="bg-white/5 rounded-2xl p-2 flex-1 min-w-0">
+                                   <div className="flex justify-between items-baseline gap-2">
+                                      <span className="text-[9px] font-black uppercase text-brand-primary truncate">{comm.userName}</span>
+                                      <span className="text-[7px] text-muted whitespace-nowrap">{formatDistanceToNow(comm.createdAt, { addSuffix: true, locale: ptBR })}</span>
+                                   </div>
+                                   <p className="text-[11px] text-gray-300 leading-tight mt-0.5">{comm.text}</p>
+                                </div>
+                             </div>
+                           ))}
+                        </div>
+                      ) : (
+                        <p className="text-[9px] text-muted text-center py-2 uppercase font-black tracking-widest opacity-50">Nenhum comentário ainda</p>
+                      )}
+
+                      <div className="flex gap-2 bg-black/40 p-2 rounded-2xl border border-white/10 group focus-within:border-brand-primary/50 transition-all">
+                        <input 
+                          type="text" 
+                          placeholder="Adicione um comentário..." 
+                          value={newCommentText}
+                          onChange={(e) => setNewCommentText(e.target.value)}
+                          onKeyDown={(e) => { if(e.key === 'Enter') handleAddComment(post); }}
+                          className="flex-1 bg-transparent border-none outline-none text-[11px] font-medium text-white px-2 placeholder:text-muted/40"
+                        />
+                        <button 
+                          onClick={() => handleAddComment(post)}
+                          disabled={!newCommentText.trim()}
+                          className="w-8 h-8 rounded-xl bg-brand-primary text-black flex items-center justify-center hover:scale-105 active:scale-95 disabled:opacity-50 disabled:scale-100 transition-all"
+                        >
+                          <Send size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
                 )}
-              </div>
-            )}
-
-            <div className="flex items-center gap-4 pt-2 border-t border-white/5">
-              <button 
-                onClick={() => handleLike(post)}
-                className={`flex items-center gap-1.5 transition-colors ${post.likes.includes(currentUser.uid) ? 'text-brand-primary' : 'text-muted hover:text-white'}`}
-              >
-                <Heart size={16} fill={post.likes.includes(currentUser.uid) ? "currentColor" : "none"} />
-                <span className="text-[10px] font-black">{post.likes.length}</span>
-              </button>
-              <div className="flex items-center gap-1.5 text-muted">
-                <MessageSquare size={16} />
-                <span className="text-[10px] font-black">{post.comments ? post.comments.length : 0}</span>
-              </div>
+              </AnimatePresence>
             </div>
           </Card>
         ))}
