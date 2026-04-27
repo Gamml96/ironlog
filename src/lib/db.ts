@@ -92,6 +92,7 @@ export interface GroupPost {
   userPhoto?: string;
   type: 'text' | 'workout';
   content?: string;
+  imageUrl?: string;
   workoutData?: WorkoutSession;
   likes: string[];
   comments: {

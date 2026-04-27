@@ -73,6 +73,7 @@
         "userPhoto": { "type": "string" },
         "type": { "type": "string", "enum": ["text", "workout"] },
         "content": { "type": "string" },
+        "imageUrl": { "type": "string" },
         "workoutData": { "type": "object" },
         "likes": { "type": "array" },
         "comments": { "type": "array" },

@@ -23,6 +23,10 @@ import {
   arrayRemove,
   writeBatch as firebaseWriteBatch
 } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+
+// Re-export Storage primitives
+export { ref, uploadBytes, getDownloadURL, deleteObject };
 import { DEFAULT_EXERCISES, Exercise, PersonalRecord, WorkoutSession, SetLog } from './db';
 
 // Re-export Firestore primitives
@@ -50,6 +54,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const storage = getStorage(app);
 
 // Use initializeFirestore with long polling for better reliability in review environments
 export const db = initializeFirestore(app, {

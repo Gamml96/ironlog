@@ -34,7 +34,13 @@ import {
   UserPlus,
   Heart,
   MessageSquare,
-  Share2
+  Share2,
+  Camera,
+  Image as ImageIcon,
+  MoreVertical,
+  Trash2,
+  Edit2,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfWeek, endOfWeek, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
@@ -79,11 +85,17 @@ import {
   arrayUnion,
   arrayRemove,
   updateDoc,
+  deleteDoc,
   updateUserDisplayName,
   where,
   logWeight,
   deleteSession,
-  updatePersonalRecords
+  updatePersonalRecords,
+  storage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject
 } from './lib/firebase';
 import { PersonalRecord } from './lib/db';
 
@@ -1540,10 +1552,35 @@ function ShareWorkoutOverlay({
   const [selectedGroups, setSelectedGroups] = useState<string[]>(groups.map(g => g.id));
   const [comment, setComment] = useState('');
   const [isSharing, setIsSharing] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleShare = async () => {
     setIsSharing(true);
     try {
+      let imageUrl = '';
+      if (selectedImage) {
+        // Upload to a generic spot or per first group if sharing across multiple?
+        // We'll upload once and use the same URL for all sharing group posts
+        const imagePath = `users/${user.uid}/shares/${Date.now()}_${selectedImage.name}`;
+        const storageRef = ref(storage, imagePath);
+        await uploadBytes(storageRef, selectedImage);
+        imageUrl = await getDownloadURL(storageRef);
+      }
+
       await Promise.all(selectedGroups.map(async (groupId) => {
         const postRef = doc(collection(db, 'groups', groupId, 'feed'));
         await setDoc(postRef, {
@@ -1553,6 +1590,7 @@ function ShareWorkoutOverlay({
           userPhoto: user.photoURL,
           type: 'workout',
           content: comment.trim(),
+          imageUrl: imageUrl,
           workoutData: workout,
           likes: [],
           comments: [],
@@ -1569,8 +1607,8 @@ function ShareWorkoutOverlay({
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
-       <Card className="w-full max-w-sm space-y-6 border-brand-primary/20 bg-bg-card shadow-2xl overflow-hidden p-0">
-          <div className="bg-brand-primary/10 p-6 flex items-center gap-4">
+       <Card className="w-full max-w-sm space-y-6 border-brand-primary/20 bg-bg-card shadow-2xl overflow-hidden p-0 max-h-[90vh] overflow-y-auto custom-scrollbar">
+          <div className="bg-brand-primary/10 p-6 flex items-center gap-4 sticky top-0 z-10 backdrop-blur-md border-b border-white/5">
              <div className="w-12 h-12 bg-brand-primary text-black rounded-xl flex items-center justify-center shadow-lg rotate-3 shrink-0">
                 <Share2 size={24} />
              </div>
@@ -1586,6 +1624,55 @@ function ShareWorkoutOverlay({
                <p className="text-xl font-black italic text-brand-primary leading-none uppercase">{workout.totalVolume.toLocaleString('pt-BR')}kg Arrecadados</p>
                <p className="text-[8px] font-bold text-muted uppercase tracking-widest">{workout.exercises.length} Exercícios • {Math.floor((workout.duration || 0)/60)} min</p>
             </div>
+
+            {imagePreview ? (
+              <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-brand-primary/20 bg-black/40">
+                <img src={imagePreview} alt="Shared" className="w-full h-full object-cover" />
+                <button 
+                  onClick={() => {
+                    setSelectedImage(null);
+                    setImagePreview(null);
+                  }}
+                  className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => {
+                    if (fileInputRef.current) {
+                      fileInputRef.current.setAttribute('capture', 'environment');
+                      fileInputRef.current.click();
+                    }
+                  }}
+                  className="flex-1 h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-brand-primary/50 hover:bg-brand-primary/5 transition-all text-muted"
+                >
+                  <Camera size={20} />
+                  <span className="text-[9px] font-black uppercase tracking-widest">Tirar Foto</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    if (fileInputRef.current) {
+                      fileInputRef.current.removeAttribute('capture');
+                      fileInputRef.current.click();
+                    }
+                  }}
+                  className="flex-1 h-24 border-2 border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center gap-2 hover:border-brand-primary/50 hover:bg-brand-primary/5 transition-all text-muted"
+                >
+                  <ImageIcon size={20} />
+                  <span className="text-[9px] font-black uppercase tracking-widest">Galeria</span>
+                </button>
+              </div>
+            )}
+            <input 
+              type="file" 
+              ref={fileInputRef} 
+              onChange={handleImageSelect} 
+              accept="image/*" 
+              className="hidden" 
+            />
 
             <div className="space-y-3">
                <label className="text-[10px] font-black uppercase text-muted tracking-widest pl-1">Escolher Grupos</label>
@@ -1622,7 +1709,7 @@ function ShareWorkoutOverlay({
                />
             </div>
 
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="flex flex-col gap-2 pt-2 pb-6">
                <Button 
                 variant="primary" 
                 className="w-full h-14 text-sm font-black italic uppercase" 
@@ -3281,6 +3368,11 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
   const [posts, setPosts] = useState<GroupPost[]>([]);
   const [postText, setPostText] = useState('');
   const [isPosting, setIsPosting] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [editingPostId, setEditingPostId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const q = query(
@@ -3295,9 +3387,17 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
   }, [group.id]);
 
   const handlePost = async () => {
-    if (!postText.trim()) return;
+    if (!postText.trim() && !selectedImage) return;
     setIsPosting(true);
     try {
+      let imageUrl = '';
+      if (selectedImage) {
+        const imagePath = `groups/${group.id}/feed/${currentUser.uid}/${Date.now()}_${selectedImage.name}`;
+        const storageRef = ref(storage, imagePath);
+        await uploadBytes(storageRef, selectedImage);
+        imageUrl = await getDownloadURL(storageRef);
+      }
+
       const postRef = doc(collection(db, 'groups', group.id, 'feed'));
       await setDoc(postRef, {
         id: postRef.id,
@@ -3306,15 +3406,30 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
         userPhoto: currentUser.photoURL,
         type: 'text',
         content: postText.trim(),
+        imageUrl: imageUrl,
         likes: [],
         comments: [],
         createdAt: Date.now()
       });
       setPostText('');
+      setSelectedImage(null);
+      setImagePreview(null);
     } catch (e) {
       console.error(e);
     } finally {
       setIsPosting(false);
+    }
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -3327,19 +3442,103 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
     }
   };
 
+  const handleDeletePost = async (post: GroupPost) => {
+    if (!confirm('Tem certeza que deseja excluir esta publicação?')) return;
+    try {
+      if (post.imageUrl) {
+        const imageRef = ref(storage, post.imageUrl);
+        await deleteObject(imageRef).catch(() => {});
+      }
+      await deleteDoc(doc(db, 'groups', group.id, 'feed', post.id));
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const startEdit = (post: GroupPost) => {
+    setEditingPostId(post.id);
+    setEditContent(post.content || '');
+  };
+
+  const saveEdit = async (post: GroupPost) => {
+    try {
+      await updateDoc(doc(db, 'groups', group.id, 'feed', post.id), {
+        content: editContent.trim()
+      });
+      setEditingPostId(null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-20 mt-2">
-      <div className="bg-bg-card rounded-2xl p-4 border border-white/5 space-y-3">
-        <textarea
-          placeholder="Como foi o treino hoje?"
-          value={postText}
-          onChange={(e) => setPostText(e.target.value)}
-          className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-[12px] font-bold text-white focus:border-brand-primary outline-none transition-all resize-none h-24"
-        />
-        <div className="flex justify-end">
+      <div className="bg-bg-card rounded-2xl p-4 border border-white/5 space-y-4">
+        <div className="space-y-2">
+          <textarea
+            placeholder="Como foi o treino hoje?"
+            value={postText}
+            onChange={(e) => setPostText(e.target.value)}
+            className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-[12px] font-bold text-white focus:border-brand-primary outline-none transition-all resize-none h-24"
+          />
+          
+          {imagePreview && (
+            <div className="relative w-full aspect-video rounded-xl overflow-hidden border border-white/10">
+              <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+              <button 
+                onClick={() => {
+                  setSelectedImage(null);
+                  setImagePreview(null);
+                }}
+                className="absolute top-2 right-2 p-1.5 bg-black/60 rounded-full text-white hover:bg-black/80 transition-colors"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-between items-center px-1">
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.setAttribute('capture', 'environment');
+                  fileInputRef.current.click();
+                }
+              }}
+              className="flex items-center gap-2 text-muted hover:text-brand-primary transition-colors"
+            >
+              <Camera size={18} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Câmera</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (fileInputRef.current) {
+                  fileInputRef.current.removeAttribute('capture');
+                  fileInputRef.current.click();
+                }
+              }}
+              className="flex items-center gap-2 text-muted hover:text-brand-primary transition-colors"
+            >
+              <ImageIcon size={18} />
+              <span className="text-[10px] font-black uppercase tracking-widest">Galeria</span>
+            </button>
+          </div>
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleImageSelect} 
+            accept="image/*" 
+            className="hidden" 
+          />
+          
           <Button 
             size="sm" 
-            disabled={!postText.trim() || isPosting} 
+            disabled={(!postText.trim() && !selectedImage) || isPosting} 
             loading={isPosting}
             onClick={handlePost}
             className="text-[10px] uppercase font-black px-6"
@@ -3356,7 +3555,7 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
           </div>
         )}
         {posts.map(post => (
-          <Card key={post.id} className="space-y-4 border-white/5">
+          <Card key={post.id} className="space-y-4 border-white/5 relative group">
             <div className="flex items-center gap-3">
               <img 
                 src={post.userPhoto || `https://picsum.photos/seed/${post.userId}/100/100`} 
@@ -3365,15 +3564,54 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
                 referrerPolicy="no-referrer"
               />
               <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-[12px] truncate uppercase tracking-tight">{post.userName}</h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-[12px] truncate uppercase tracking-tight">{post.userName}</h4>
+                  {(post.userId === currentUser.uid || group.creatorId === currentUser.uid) && (
+                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {post.userId === currentUser.uid && editingPostId !== post.id && (
+                        <button onClick={() => startEdit(post)} className="p-1 text-muted hover:text-white">
+                          <Edit2 size={12} />
+                        </button>
+                      )}
+                      <button onClick={() => handleDeletePost(post)} className="p-1 text-muted hover:text-red-500">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <p className="text-[8px] text-muted font-black uppercase tracking-widest">
                   {formatDistanceToNow(post.createdAt, { addSuffix: true, locale: ptBR })}
                 </p>
               </div>
             </div>
 
-            {post.type === 'text' && (
-              <p className="text-sm text-gray-300 font-medium leading-relaxed">{post.content}</p>
+            {editingPostId === post.id ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="w-full bg-black/40 border border-brand-primary/50 rounded-xl p-3 text-[12px] font-bold text-white outline-none h-20"
+                />
+                <div className="flex justify-end gap-2">
+                   <button onClick={() => setEditingPostId(null)} className="text-[10px] font-black uppercase text-muted py-1 px-3">Cancelar</button>
+                   <button onClick={() => saveEdit(post)} className="text-[10px] font-black uppercase bg-brand-primary text-black py-1 px-4 rounded-lg">Salvar</button>
+                </div>
+              </div>
+            ) : (
+              post.type === 'text' && post.content && (
+                <p className="text-sm text-gray-300 font-medium leading-relaxed px-1">{post.content}</p>
+              )
+            )}
+
+            {post.imageUrl && (
+              <div className="rounded-xl overflow-hidden border border-white/5 w-full bg-black/20">
+                <img 
+                  src={post.imageUrl} 
+                  alt="Post content" 
+                  className="w-full h-auto max-h-[400px] object-contain" 
+                  loading="lazy"
+                />
+              </div>
             )}
 
             {post.type === 'workout' && post.workoutData && (
