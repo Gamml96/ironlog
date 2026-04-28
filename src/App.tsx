@@ -2985,6 +2985,25 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
     return (b.totalWorkouts || 0) - (a.totalWorkouts || 0);
   });
 
+  const getMemberScore = (m: any) => {
+    if (group.startDate && group.endDate) {
+      return challengeStats[m.uid] || 0;
+    }
+    return m.totalWorkouts || 0;
+  };
+
+  const memberRanks: Record<string, number> = {};
+  let currentDisplayRank = 0;
+  let lastScore = -1;
+  sortedMembers.forEach((m, idx) => {
+    const score = getMemberScore(m);
+    if (idx === 0 || score !== lastScore) {
+      currentDisplayRank++;
+    }
+    memberRanks[m.uid] = currentDisplayRank;
+    lastScore = score;
+  });
+
   const updateChallenge = async () => {
     if (!sDate || !eDate) return;
     try {
@@ -3114,26 +3133,45 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                 {/* Podium for Top 3 */}
                 {sortedMembers.length > 0 && (
                   <div className="flex items-end justify-center gap-2 pt-8 pb-4 mb-4">
-                    {/* 2nd Place */}
+                    {/* 2nd Place Position */}
                     {sortedMembers[1] && (
                       <div className="flex flex-col items-center gap-2 w-1/3">
                         <div className="relative group">
-                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gray-400 text-black px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg z-10">#2</div>
+                          {memberRanks[sortedMembers[1].uid] === 1 && (
+                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-500 animate-pulse">
+                              <Trophy size={16} fill="currentColor" />
+                            </div>
+                          )}
+                          <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg z-10 ${
+                            memberRanks[sortedMembers[1].uid] === 1 ? 'bg-yellow-500 text-black' : 
+                            memberRanks[sortedMembers[1].uid] === 2 ? 'bg-gray-400 text-black' : 
+                            'bg-orange-700/80 text-white'
+                          }`}>#{memberRanks[sortedMembers[1].uid]}</div>
                           <img 
                             src={sortedMembers[1].photoURL || `https://picsum.photos/seed/${sortedMembers[1].uid}/100/100`} 
                             alt="" 
-                            className="w-14 h-14 rounded-2xl border-2 border-gray-400/30 object-cover"
+                            className={`w-14 h-14 rounded-2xl border-2 object-cover ${
+                              memberRanks[sortedMembers[1].uid] === 1 ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 
+                              memberRanks[sortedMembers[1].uid] === 2 ? 'border-gray-400/30' : 
+                              'border-orange-700/30'
+                            }`}
                             referrerPolicy="no-referrer"
                           />
                         </div>
                         <div className="text-center">
                           <p className="text-[10px] font-bold uppercase truncate max-w-[80px]">{sortedMembers[1].displayName}</p>
-                          <p className="text-[12px] font-black text-gray-400">{(group.startDate && group.endDate) ? (challengeStats[sortedMembers[1].uid] || 0) : (sortedMembers[1].totalWorkouts || 0)} <span className="text-[8px] opacity-70">pts</span></p>
+                          <p className={`text-[12px] font-black ${
+                            memberRanks[sortedMembers[1].uid] === 1 ? 'text-yellow-500' : 
+                            memberRanks[sortedMembers[1].uid] === 2 ? 'text-gray-400' : 
+                            'text-orange-700'
+                          }`}>
+                            {getMemberScore(sortedMembers[1])} <span className="text-[8px] opacity-70">pts</span>
+                          </p>
                         </div>
                       </div>
                     )}
 
-                    {/* 1st Place */}
+                    {/* 1st Place Position */}
                     {sortedMembers[0] && (
                       <div className="flex flex-col items-center gap-3 w-1/3 -mt-4">
                         <div className="relative group">
@@ -3151,26 +3189,45 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                         </div>
                         <div className="text-center">
                           <p className="text-[11px] font-black uppercase tracking-tight truncate max-w-[100px] text-yellow-500">{sortedMembers[0].displayName}</p>
-                          <p className="text-[16px] font-black italic text-brand-primary">{(group.startDate && group.endDate) ? (challengeStats[sortedMembers[0].uid] || 0) : (sortedMembers[0].totalWorkouts || 0)} <span className="text-[10px] opacity-70">pts</span></p>
+                          <p className="text-[16px] font-black italic text-brand-primary">{getMemberScore(sortedMembers[0])} <span className="text-[10px] opacity-70">pts</span></p>
                         </div>
                       </div>
                     )}
 
-                    {/* 3rd Place */}
+                    {/* 3rd Place Position */}
                     {sortedMembers[2] && (
                       <div className="flex flex-col items-center gap-2 w-1/3">
                         <div className="relative group">
-                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-700/80 text-white px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic z-10 shadow-lg">#3</div>
+                          {memberRanks[sortedMembers[2].uid] === 1 && (
+                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-500 animate-pulse">
+                              <Trophy size={16} fill="currentColor" />
+                            </div>
+                          )}
+                          <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg z-10 ${
+                            memberRanks[sortedMembers[2].uid] === 1 ? 'bg-yellow-500 text-black' : 
+                            memberRanks[sortedMembers[2].uid] === 2 ? 'bg-gray-400 text-black' : 
+                            'bg-orange-700/80 text-white'
+                          }`}>#{memberRanks[sortedMembers[2].uid]}</div>
                           <img 
                             src={sortedMembers[2].photoURL || `https://picsum.photos/seed/${sortedMembers[2].uid}/100/100`} 
                             alt="" 
-                            className="w-14 h-14 rounded-2xl border-2 border-orange-700/30 object-cover"
+                            className={`w-14 h-14 rounded-2xl border-2 object-cover ${
+                              memberRanks[sortedMembers[2].uid] === 1 ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 
+                              memberRanks[sortedMembers[2].uid] === 2 ? 'border-gray-400/30' : 
+                              'border-orange-700/30'
+                            }`}
                             referrerPolicy="no-referrer"
                           />
                         </div>
                         <div className="text-center">
                           <p className="text-[10px] font-bold uppercase truncate max-w-[80px]">{sortedMembers[2].displayName}</p>
-                          <p className="text-[12px] font-black text-orange-700">{(group.startDate && group.endDate) ? (challengeStats[sortedMembers[2].uid] || 0) : (sortedMembers[2].totalWorkouts || 0)} <span className="text-[8px] opacity-70">pts</span></p>
+                          <p className={`text-[12px] font-black ${
+                            memberRanks[sortedMembers[2].uid] === 1 ? 'text-yellow-500' : 
+                            memberRanks[sortedMembers[2].uid] === 2 ? 'text-gray-400' : 
+                            memberRanks[sortedMembers[2].uid] === 3 ? 'text-orange-700' : 'text-muted'
+                          }`}>
+                            {getMemberScore(sortedMembers[2])} <span className="text-[8px] opacity-70">pts</span>
+                          </p>
                         </div>
                       </div>
                     )}
@@ -3180,16 +3237,17 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                 {/* List for 4th and beyond */}
                 <div className="space-y-2">
                   {sortedMembers.map((member, idx) => {
-                    // Skip top 3
+                    // Skip top 3 members specifically (indices 0, 1, 2)
                     if (idx < 3) return null;
                     
+                    const rank = memberRanks[member.uid];
                     return (
                       <Card 
                         key={member.uid} 
                         className={`flex items-center gap-4 transition-all py-3 ${member.uid === currentUser.uid ? 'border-brand-primary bg-brand-primary/5' : 'border-white/5 opacity-90'}`}
                       >
                         <div className="w-6 text-center font-black italic text-gray-700 text-xs">
-                          #{idx + 1}
+                          #{rank}
                         </div>
                         <img 
                           src={member.photoURL || `https://picsum.photos/seed/${member.uid}/100/100`} 
@@ -3205,7 +3263,7 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-[14px] text-brand-primary font-black uppercase leading-none tracking-tighter">
-                            { (group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0) } <span className="text-[8px] opacity-70">pts</span>
+                            {getMemberScore(member)} <span className="text-[8px] opacity-70">pts</span>
                           </p>
                           <div className="flex items-center justify-end gap-1 mt-1">
                             <Flame size={10} className={member.uid === currentUser.uid ? 'text-brand-primary' : 'text-gray-700'} />
@@ -3219,16 +3277,17 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                   {/* Current user context if not in podium or for reinforcement */}
                   {sortedMembers.slice(0, 3).map((member, idx) => {
                     if (member.uid !== currentUser.uid) return null;
+                    const rank = memberRanks[member.uid];
                     return (
                       <div key="current-user-top" className="mt-4 p-4 rounded-2xl bg-brand-primary text-black border border-brand-primary shadow-[0_0_20px_rgba(255,94,26,0.1)]">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center font-black italic">#{idx + 1}</div>
+                          <div className="w-8 h-8 rounded-full bg-black/10 flex items-center justify-center font-black italic">#{rank}</div>
                           <div className="flex-1">
                             <p className="text-[10px] font-black uppercase leading-none opacity-70">Sua Posição</p>
                             <h4 className="font-black uppercase text-sm tracking-tight">Você está no pódio!</h4>
                           </div>
                           <div className="text-right">
-                            <p className="text-lg font-black leading-none italic">{(group.startDate && group.endDate) ? (challengeStats[member.uid] || 0) : (member.totalWorkouts || 0)} PTS</p>
+                            <p className="text-lg font-black leading-none italic">{getMemberScore(member)} PTS</p>
                           </div>
                         </div>
                       </div>
