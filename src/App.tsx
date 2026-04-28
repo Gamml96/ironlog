@@ -3359,6 +3359,20 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
     }
   };
 
+  const handleDeleteComment = async (post: GroupPost, commentIndex: number) => {
+    if (!confirm('Deseja excluir este comentário?')) return;
+    try {
+      const postRef = doc(db, 'groups', group.id, 'feed', post.id);
+      const newComments = [...post.comments];
+      newComments.splice(commentIndex, 1);
+      await updateDoc(postRef, {
+        comments: newComments
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
   const handleDeletePost = async (post: GroupPost) => {
     if (!confirm('Tem certeza que deseja excluir esta publicação?')) return;
     try {
@@ -3416,14 +3430,14 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-[13px] truncate uppercase tracking-tight leading-none">{post.userName}</h4>
                     {(post.userId === currentUser.uid || group.creatorId === currentUser.uid) && (
-                      <div className="flex gap-2 opacity-0 group-hover/post:opacity-100 transition-opacity">
+                      <div className="flex gap-1">
                         {post.userId === currentUser.uid && editingPostId !== post.id && (
-                          <button onClick={() => startEdit(post)} className="p-1.5 text-muted hover:text-brand-primary transition-colors">
-                            <Edit2 size={14} />
+                          <button onClick={() => startEdit(post)} className="p-2 text-muted hover:text-brand-primary transition-colors bg-white/5 rounded-lg active:scale-95">
+                            <Edit2 size={12} />
                           </button>
                         )}
-                        <button onClick={() => handleDeletePost(post)} className="p-1.5 text-muted hover:text-red-500 transition-colors">
-                          <Trash2 size={14} />
+                        <button onClick={() => handleDeletePost(post)} className="p-2 text-muted hover:text-red-500 transition-colors bg-white/5 rounded-lg active:scale-95">
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     )}
@@ -3536,18 +3550,28 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
                     <div className="py-4 space-y-4">
                       {post.comments && post.comments.length > 0 ? (
                         <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
-                           {post.comments.sort((a,b) => a.createdAt - b.createdAt).map((comm, idx) => (
-                             <div key={idx} className="flex gap-2">
-                                <img src={comm.userPhoto || `https://picsum.photos/seed/${comm.userId}/100/100`} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0" referrerPolicy="no-referrer" />
-                                <div className="bg-white/5 rounded-2xl p-2 flex-1 min-w-0">
-                                   <div className="flex justify-between items-baseline gap-2">
-                                      <span className="text-[9px] font-black uppercase text-brand-primary truncate">{comm.userName}</span>
-                                      <span className="text-[7px] text-muted whitespace-nowrap">{formatDistanceToNow(comm.createdAt, { addSuffix: true, locale: ptBR })}</span>
-                                   </div>
-                                   <p className="text-[11px] text-gray-300 leading-tight mt-0.5">{comm.text}</p>
-                                </div>
-                             </div>
-                           ))}
+                            {post.comments.sort((a,b) => a.createdAt - b.createdAt).map((comm, idx) => (
+                              <div key={idx} className="flex gap-2 group/comment">
+                                 <img src={comm.userPhoto || `https://picsum.photos/seed/${comm.userId}/100/100`} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0" referrerPolicy="no-referrer" />
+                                 <div className="bg-white/5 rounded-2xl p-2 flex-1 min-w-0 relative">
+                                    <div className="flex justify-between items-baseline gap-2">
+                                       <span className="text-[9px] font-black uppercase text-brand-primary truncate">{comm.userName}</span>
+                                       <div className="flex items-center gap-2">
+                                          <span className="text-[7px] text-muted whitespace-nowrap">{formatDistanceToNow(comm.createdAt, { addSuffix: true, locale: ptBR })}</span>
+                                          {(comm.userId === currentUser.uid || group.creatorId === currentUser.uid) && (
+                                            <button 
+                                              onClick={() => handleDeleteComment(post, idx)}
+                                              className="opacity-0 group-hover/comment:opacity-100 transition-opacity text-muted hover:text-red-500"
+                                            >
+                                              <Trash2 size={8} />
+                                            </button>
+                                          )}
+                                       </div>
+                                    </div>
+                                    <p className="text-[11px] text-gray-300 leading-tight mt-0.5">{comm.text}</p>
+                                 </div>
+                              </div>
+                            ))}
                         </div>
                       ) : (
                         <p className="text-[9px] text-muted text-center py-2 uppercase font-black tracking-widest opacity-50">Nenhum comentário ainda</p>
