@@ -56,10 +56,8 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Use initializeFirestore with long polling for better reliability in review environments
-export const db = initializeFirestore(app, {
-  experimentalForceLongPolling: true,
-}, firebaseConfig.firestoreDatabaseId);
+// Use getFirestore with the database ID
+export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 export const googleProvider = new GoogleAuthProvider();
 
@@ -78,8 +76,13 @@ async function testConnection() {
       return;
     }
 
-    if (errorMsg.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration or internet connection.");
+    if (errorMsg.includes('the client is offline') || errorMsg.includes('unavailable')) {
+      console.error("Firestore connectivity error: The client is offline or the backend is unavailable. Please check your Firebase configuration or internet connection.");
+      console.error("Debug Info:", {
+        projectId: firebaseConfig.projectId,
+        databaseId: firebaseConfig.firestoreDatabaseId,
+        error: errorMsg
+      });
     } else {
       console.error("Firestore connectivity check failed:", error);
     }

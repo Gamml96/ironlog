@@ -232,7 +232,7 @@ const rotateWorkoutPlans = async (planId: string) => {
 // --- App Entry & Navigation ---
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'hoje' | 'treinos' | 'progresso' | 'exercicios' | 'grupos' | 'config' | 'ranking'>('hoje');
+  const [activeTab, setActiveTab] = useState<'hoje' | 'treinos' | 'progresso' | 'exercicios' | 'grupos' | 'config'>('hoje');
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
@@ -445,7 +445,6 @@ export default function App() {
           {activeTab === 'progresso' && <ProgressoView />}
           {activeTab === 'exercicios' && <ExerciciosView />}
           {activeTab === 'grupos' && <GruposView currentUser={user} />}
-          {activeTab === 'ranking' && <RankingView currentUser={user} />}
           {activeTab === 'config' && (
             <SettingsView 
               onBack={() => navigateTab('hoje')} 
@@ -490,7 +489,6 @@ export default function App() {
         <div className="flex items-center justify-around h-20 max-w-md mx-auto px-2">
           <NavButton icon={<LayoutDashboard />} label="Hoje" active={activeTab === 'hoje'} onClick={() => navigateTab('hoje')} />
           <NavButton icon={<Dumbbell />} label="Treinos" active={activeTab === 'treinos'} onClick={() => navigateTab('treinos')} />
-          <NavButton icon={<Trophy />} label="Geral" active={activeTab === 'ranking'} onClick={() => navigateTab('ranking')} />
           <NavButton icon={<Users />} label="Grupos" active={activeTab === 'grupos'} onClick={() => navigateTab('grupos')} />
           <NavButton icon={<TrendingUp />} label="Evolução" active={activeTab === 'progresso'} onClick={() => navigateTab('progresso')} />
         </div>
@@ -2618,219 +2616,6 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
 }
 
 // --- View: Ranking ---
-
-function RankingView({ currentUser }: { currentUser: FirebaseUser }) {
-  const [rankings, setRankings] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [range, setRange] = useState<'weekly' | 'monthly' | 'yearly' | 'total'>('total');
-  const [rankingType, setRankingType] = useState<'workouts' | 'frequency'>('workouts');
-  const [rankingStats, setRankingStats] = useState<Record<string, number>>({});
-
-  useEffect(() => {
-    setLoading(true);
-    const now = new Date();
-    const periodIds = {
-      weekly: format(now, 'yyyy-ww'),
-      monthly: format(now, 'yyyy-MM'),
-      yearly: format(now, 'yyyy')
-    };
-
-    // Pull users with at least one workout
-    const q = query(
-      collection(db, 'users'), 
-      where('totalWorkouts', '>', 0),
-      limit(100)
-    );
-
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      let data = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() as any }))
-        .filter(user => user.showInRanking !== false); // Default to true if missing
-      
-      const currentId = periodIds[range as keyof typeof periodIds];
-
-      // If frequency is selected, we need to calculate it from sessions
-      if (rankingType === 'frequency') {
-        const stats: Record<string, number> = {};
-        
-        await Promise.all(data.map(async (user) => {
-          let sessionQuery;
-          if (range === 'total') {
-            sessionQuery = query(collection(db, 'users', user.uid, 'sessions'), where('isCompleted', '==', true));
-          } else {
-            // Estimate timestamps for period
-            let start, end;
-            const now = new Date();
-            if (range === 'weekly') { start = startOfWeek(now).getTime(); end = endOfWeek(now).getTime(); }
-            else if (range === 'monthly') { start = new Date(now.getFullYear(), now.getMonth(), 1).getTime(); end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23).getTime(); }
-            else { start = new Date(now.getFullYear(), 0, 1).getTime(); end = new Date(now.getFullYear(), 11, 31, 23).getTime(); }
-
-            sessionQuery = query(
-              collection(db, 'users', user.uid, 'sessions'), 
-              where('isCompleted', '==', true),
-              where('date', '>=', start),
-              where('date', '<=', end)
-            );
-          }
-
-          const snap = await getDocs(sessionQuery);
-          const days = new Set();
-          snap.docs.forEach(doc => {
-            const sessionData = doc.data() as any;
-            days.add(new Date(sessionData.date).toDateString());
-          });
-          stats[user.uid] = days.size;
-        }));
-        
-        setRankingStats(stats);
-        data = data.sort((a, b) => (stats[b.uid] || 0) - (stats[a.uid] || 0)).slice(0, 50);
-      } else {
-        // Fallback to pre-calculated stats for workouts
-        if (range === 'total') {
-          data = data.sort((a, b) => (b.totalWorkouts || 0) - (a.totalWorkouts || 0)).slice(0, 50);
-        } else {
-          data = data.sort((a, b) => {
-            const valA = a[range]?.id === currentId ? (a[range]?.workouts || 0) : 0;
-            const valB = b[range]?.id === currentId ? (b[range]?.workouts || 0) : 0;
-            return valB - valA;
-          }).slice(0, 50);
-        }
-      }
-      
-      setRankings(data);
-      setLoading(false);
-    }, (err) => {
-      console.error("Ranking query error:", err);
-      setRankings([]);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [range, rankingType]);
-
-  return (
-    <motion.div 
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="py-4 space-y-6"
-    >
-      <header className="relative">
-        <div className="absolute -top-10 -right-10 w-40 h-40 bg-brand-primary/10 rounded-full blur-3xl pointer-events-none" />
-        <h1 className="text-4xl italic font-black uppercase tracking-tighter leading-tight">Olimpo <span className="text-brand-primary">Iron</span></h1>
-        
-        {/* Metric Label and Selector */}
-        <div className="mt-4 flex items-center justify-between">
-           <p className="text-[10px] font-black uppercase tracking-[0.1em] text-gray-500">
-             Ranking por {rankingType === 'workouts' ? 'Total de Treinos' : 'Frequência (Dias Únicos)'}
-           </p>
-           <div className="flex gap-2">
-              <button 
-                onClick={() => setRankingType('workouts')}
-                className={`p-1.5 rounded-lg border transition-all ${rankingType === 'workouts' ? 'border-brand-primary bg-brand-primary/10 text-brand-primary' : 'border-white/5 bg-white/5 text-gray-500 hover:bg-white/10'}`}
-              >
-                 <Trophy size={14} />
-              </button>
-              <button 
-                onClick={() => setRankingType('frequency')}
-                className={`p-1.5 rounded-lg border transition-all ${rankingType === 'frequency' ? 'border-brand-primary bg-brand-primary/10 text-brand-primary' : 'border-white/5 bg-white/5 text-gray-500 hover:bg-white/10'}`}
-              >
-                 <Calendar size={14} />
-              </button>
-           </div>
-        </div>
-
-        {/* Range Selector */}
-        <div className="flex gap-4 mt-4 overflow-x-auto no-scrollbar pb-1">
-           {[
-             { id: 'weekly', label: 'Semanal' },
-             { id: 'monthly', label: 'Mensal' },
-             { id: 'yearly', label: 'Anual' },
-             { id: 'total', label: 'Geral' }
-           ].map(r => (
-             <button 
-               key={r.id}
-               onClick={() => setRange(r.id as any)}
-               className={`whitespace-nowrap text-[11px] font-black uppercase italic tracking-tight transition-all pb-1 border-b-2 ${range === r.id ? 'text-white border-brand-primary' : 'text-gray-600 border-transparent hover:text-gray-400'}`}
-             >
-               {r.label}
-             </button>
-           ))}
-        </div>
-      </header>
-
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <Dumbbell className="animate-spin text-brand-primary w-10 h-10" />
-        </div>
-      ) : rankings.length > 0 ? (
-        <div className="space-y-3">
-          {rankings.map((user, index) => {
-            const isMe = user.uid === currentUser.uid;
-            return (
-              <motion.div
-                key={user.uid}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Card className={`relative flex items-center gap-4 transition-all ${isMe ? 'border-brand-primary bg-brand-primary/5' : 'border-white/5'}`}>
-                   <div className="w-8 text-center">
-                      {index === 0 ? <Trophy className="w-6 h-6 text-yellow-500 mx-auto" strokeWidth={3} /> :
-                       index === 1 ? <Trophy className="w-6 h-6 text-gray-400 mx-auto" strokeWidth={3} /> :
-                       index === 2 ? <Trophy className="w-6 h-6 text-amber-700 mx-auto" strokeWidth={3} /> :
-                       <span className="text-lg font-black italic text-gray-700">#{index + 1}</span>}
-                   </div>
-                   
-                   <img 
-                    src={user.photoURL || 'https://picsum.photos/seed/user/100/100'} 
-                    alt="" 
-                    className={`w-12 h-12 rounded-xl border-2 ${isMe ? 'border-brand-primary' : 'border-white/10'}`}
-                    referrerPolicy="no-referrer"
-                   />
-                   
-                   <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <h4 className="font-bold text-sm truncate uppercase tracking-tight">{user.displayName}</h4>
-                        {isMe && <Badge>Você</Badge>}
-                      </div>
-                      <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest mt-0.5">{user.totalWorkouts} treinos concluídos</p>
-                   </div>
-
-                   <div className="text-right">
-                       <p className="text-lg font-display font-black italic text-brand-primary leading-none">
-                         {rankingType === 'frequency' ? (rankingStats[user.uid] || 0) : (() => {
-                            if (range === 'total') return user.totalWorkouts || 0;
-                            const now = new Date();
-                            const pId = format(now, range === 'weekly' ? 'yyyy-ww' : range === 'monthly' ? 'yyyy-MM' : 'yyyy');
-                            return user[range]?.id === pId ? (user[range]?.workouts || 0) : 0;
-                         })()}
-                       </p>
-                       <p className="text-[9px] text-gray-600 uppercase font-bold">
-                          {rankingType === 'frequency' ? 'Dias' : (range === 'total' ? 'Treinos' : 'Strikes')}
-                       </p>
-                    </div>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
-           <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center">
-              <Dumbbell className="text-gray-700 w-8 h-8" />
-           </div>
-           <div>
-             <p className="text-sm font-bold uppercase tracking-tight">Nenhum registro para este período</p>
-             <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">Seja o primeiro a treinar e assuma o topo!</p>
-           </div>
-        </div>
-      )}
-
-      {!rankings.some(u => u.uid === currentUser.uid) && !loading && (
-        <p className="text-center text-[10px] text-gray-600 uppercase font-bold py-4">Treine mais para aparecer no Top 50!</p>
-      )}
-    </motion.div>
-  );
-}
 
 // --- View: Grupos (Social Competition) ---
 
