@@ -3325,7 +3325,7 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
       limit(50)
     );
     const unsub = onSnapshot(q, (snap) => {
-      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GroupPost)));
+      setPosts(snap.docs.map(d => ({ ...d.data(), id: d.id } as GroupPost)));
     });
     return () => unsub();
   }, [group.id]);
@@ -3359,30 +3359,52 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
     }
   };
 
+  const [deletingCommentId, setDeletingCommentId] = useState<{postId: string, index: number} | null>(null);
+
   const handleDeleteComment = async (post: GroupPost, commentIndex: number) => {
-    if (!confirm('Deseja excluir este comentário?')) return;
-    try {
-      const postRef = doc(db, 'groups', group.id, 'feed', post.id);
-      const newComments = [...post.comments];
-      newComments.splice(commentIndex, 1);
-      await updateDoc(postRef, {
-        comments: newComments
-      });
-    } catch (e) {
-      console.error(e);
+    const isConfirming = deletingCommentId?.postId === post.id && deletingCommentId?.index === commentIndex;
+
+    if (isConfirming) {
+      try {
+        const postRef = doc(db, 'groups', group.id, 'feed', post.id);
+        const newComments = [...post.comments];
+        newComments.splice(commentIndex, 1);
+        await updateDoc(postRef, {
+          comments: newComments
+        });
+        setDeletingCommentId(null);
+      } catch (e) {
+        console.error(e);
+        setDeletingCommentId(null);
+        alert("Erro ao excluir comentário.");
+      }
+    } else {
+      setDeletingCommentId({ postId: post.id, index: commentIndex });
+      setTimeout(() => setDeletingCommentId(prev => (prev?.postId === post.id && prev?.index === commentIndex) ? null : prev), 3000);
     }
   };
 
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+
   const handleDeletePost = async (post: GroupPost) => {
-    if (!confirm('Tem certeza que deseja excluir esta publicação?')) return;
-    try {
-      if (post.imageUrl) {
-        const imageRef = ref(storage, post.imageUrl);
-        await deleteObject(imageRef).catch(() => {});
+    if (deletingPostId === post.id) {
+      try {
+        setDeletingPostId(post.id);
+        if (post.imageUrl) {
+          const imageRef = ref(storage, post.imageUrl);
+          await deleteObject(imageRef).catch(() => {});
+        }
+        await deleteDoc(doc(db, 'groups', group.id, 'feed', post.id));
+        setDeletingPostId(null);
+      } catch (e) {
+        console.error("Error deleting post:", e);
+        setDeletingPostId(null);
+        alert("Erro ao excluir postagem.");
       }
-      await deleteDoc(doc(db, 'groups', group.id, 'feed', post.id));
-    } catch (e) {
-      console.error(e);
+    } else {
+      setDeletingPostId(post.id);
+      // Auto-reset after 3 seconds if not confirmed
+      setTimeout(() => setDeletingPostId(prev => prev === post.id ? null : prev), 3000);
     }
   };
 
@@ -3430,14 +3452,33 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
                   <div className="flex items-center justify-between">
                     <h4 className="font-bold text-[13px] truncate uppercase tracking-tight leading-none">{post.userName}</h4>
                     {(post.userId === currentUser.uid || group.creatorId === currentUser.uid) && (
-                      <div className="flex gap-1">
+                      <div className="flex gap-1.5">
                         {post.userId === currentUser.uid && editingPostId !== post.id && (
-                          <button onClick={() => startEdit(post)} className="p-2 text-muted hover:text-brand-primary transition-colors bg-white/5 rounded-lg active:scale-95">
-                            <Edit2 size={12} />
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); startEdit(post); }} 
+                            className="p-2.5 text-muted hover:text-brand-primary transition-colors bg-white/5 rounded-xl active:scale-95 flex items-center justify-center"
+                          >
+                            <Edit2 size={14} />
                           </button>
                         )}
-                        <button onClick={() => handleDeletePost(post)} className="p-2 text-muted hover:text-red-500 transition-colors bg-white/5 rounded-lg active:scale-95">
-                          <Trash2 size={12} />
+                        <button 
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeletePost(post); }} 
+                          className={`flex items-center gap-2 p-2.5 transition-all duration-300 rounded-xl active:scale-95 ${
+                            deletingPostId === post.id 
+                            ? 'bg-red-500 text-white px-4' 
+                            : 'bg-white/5 text-muted hover:text-red-500'
+                          }`}
+                        >
+                          {deletingPostId === post.id ? (
+                            <>
+                              <Trash2 size={14} className="animate-bounce" />
+                              <span className="text-[10px] font-black uppercase tracking-tighter italic">Confirmar?</span>
+                            </>
+                          ) : (
+                            <Trash2 size={14} />
+                          )}
                         </button>
                       </div>
                     )}
@@ -3560,10 +3601,18 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
                                           <span className="text-[7px] text-muted whitespace-nowrap">{formatDistanceToNow(comm.createdAt, { addSuffix: true, locale: ptBR })}</span>
                                           {(comm.userId === currentUser.uid || group.creatorId === currentUser.uid) && (
                                             <button 
-                                              onClick={() => handleDeleteComment(post, idx)}
-                                              className="opacity-0 group-hover/comment:opacity-100 transition-opacity text-muted hover:text-red-500"
+                                              type="button"
+                                              onClick={(e) => { e.stopPropagation(); handleDeleteComment(post, idx); }}
+                                              className={`transition-all duration-300 p-1 flex items-center gap-1 rounded-md ${
+                                                deletingCommentId?.postId === post.id && deletingCommentId?.index === idx
+                                                ? 'bg-red-500 text-white px-2'
+                                                : 'opacity-60 md:opacity-0 group-hover/comment:opacity-100 text-muted hover:text-red-500'
+                                              }`}
                                             >
-                                              <Trash2 size={8} />
+                                              <Trash2 size={deletingCommentId?.postId === post.id && deletingCommentId?.index === idx ? 10 : 10} />
+                                              {deletingCommentId?.postId === post.id && deletingCommentId?.index === idx && (
+                                                <span className="text-[7px] font-black uppercase italic">Excluir?</span>
+                                              )}
                                             </button>
                                           )}
                                        </div>
