@@ -1968,9 +1968,9 @@ function ActiveWorkoutOverlay({
       initial={{ y: '100%' }}
       animate={{ y: 0 }}
       exit={{ y: '100%' }}
-      className="fixed inset-0 bg-bg-base z-[100] flex flex-col pt-safe no-scrollbar h-full overflow-y-auto"
+      className="fixed inset-0 bg-bg-base z-[100] flex flex-col pt-safe h-full"
     >
-      <header className="bg-bg-card p-4 flex items-center justify-between sticky top-0 z-[110] border-b border-white/5">
+      <header className="bg-bg-card p-4 flex items-center justify-between flex-none z-[110] border-b border-white/5">
          <div className="flex items-center gap-3">
             <div className="relative">
               <div className="w-14 h-14 bg-brand-primary text-black rounded-full flex items-center justify-center font-display font-black italic text-xl shadow-[0_0_20px_rgba(255,94,26,0.2)]">
@@ -2021,7 +2021,7 @@ function ActiveWorkoutOverlay({
         <motion.div 
           initial={{ height: 0, opacity: 0 }}
           animate={{ height: 'auto', opacity: 1 }}
-          className="bg-brand-primary text-black py-3 px-6 flex items-center justify-between sticky top-[88px] z-[105] font-black shadow-[0_8px_30px_rgba(255,94,26,0.3)]"
+          className="bg-brand-primary text-black py-3 px-6 flex items-center justify-between flex-none z-[105] font-black shadow-[0_8px_30px_rgba(255,94,26,0.3)]"
         >
           <div className="flex items-center gap-3 text-sm uppercase tracking-tighter">
              <Timer size={20} strokeWidth={3} /> <span className="italic">DESCANSANDO:</span>
@@ -2077,7 +2077,8 @@ function ActiveWorkoutOverlay({
         )}
       </AnimatePresence>
 
-      <div className="px-5 py-8 space-y-10 flex-1 pb-40">
+      <div className="flex-1 overflow-y-auto no-scrollbar pb-40">
+        <div className="px-5 py-8 space-y-10">
         {currentSession.exercises.map((ex, exIdx) => {
           const detail = exerciseDetails[ex.exerciseId];
           const isTimeEx = ['Cardio', 'Lutas'].includes(detail?.muscleGroup || '');
@@ -2212,6 +2213,7 @@ function ActiveWorkoutOverlay({
             </div>
           );
         })}
+        </div>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-bg-base via-bg-base to-transparent z-[120]">
