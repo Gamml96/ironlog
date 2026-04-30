@@ -42,6 +42,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfWeek, endOfWeek, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import imageCompression from 'browser-image-compression';
 import { 
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
@@ -147,12 +148,14 @@ const Button = ({
   size = 'md', 
   className = '', 
   loading = false,
+  loadingText,
   disabled,
   ...props 
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger', 
   size?: 'sm' | 'md' | 'lg' | 'icon',
-  loading?: boolean
+  loading?: boolean,
+  loadingText?: string
 }) => {
   const base = "inline-flex items-center justify-center font-display font-black uppercase transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 tracking-wider gap-2";
   const variants = {
@@ -175,7 +178,10 @@ const Button = ({
       {...props}
     >
       {loading ? (
-        <Dumbbell className="w-5 h-5 animate-spin" />
+        <>
+          <Dumbbell className="w-5 h-5 animate-spin" />
+          {loadingText && <span className="ml-2">{loadingText}</span>}
+        </>
       ) : (
         children
       )}
@@ -1568,12 +1574,28 @@ function ShareWorkoutOverlay({
     try {
       let imageUrl = '';
       if (selectedImage) {
-        // Upload to a generic spot or per first group if sharing across multiple?
-        // We'll upload once and use the same URL for all sharing group posts
-        const imagePath = `users/${user.uid}/shares/${Date.now()}_${selectedImage.name}`;
-        const storageRef = ref(storage, imagePath);
-        await uploadBytes(storageRef, selectedImage);
-        imageUrl = await getDownloadURL(storageRef);
+        // Opções de compressão: mantendo qualidade mas reduzindo consideravelmente o peso
+        const options = {
+          maxSizeMB: 0.8, // Max 0.8MB (aprox 800KB) - bom equilíbrio
+          maxWidthOrHeight: 1280, // Redimensionar se maior que 1280px
+          useWebWorker: true,
+          initialQuality: 0.7 // Reduzir levemente a qualidade inicial para maior compressão
+        };
+
+        try {
+          // Status visual de compressão
+          const compressedFile = await imageCompression(selectedImage, options);
+          const imagePath = `users/${user.uid}/shares/${Date.now()}_${compressedFile.name}`;
+          const storageRef = ref(storage, imagePath);
+          await uploadBytes(storageRef, compressedFile);
+          imageUrl = await getDownloadURL(storageRef);
+        } catch (compressionError) {
+          console.error("Erro na compressão, enviando original:", compressionError);
+          const imagePath = `users/${user.uid}/shares/${Date.now()}_${selectedImage.name}`;
+          const storageRef = ref(storage, imagePath);
+          await uploadBytes(storageRef, selectedImage);
+          imageUrl = await getDownloadURL(storageRef);
+        }
       }
 
       await Promise.all(selectedGroups.map(async (groupId) => {
@@ -1711,6 +1733,7 @@ function ShareWorkoutOverlay({
                 onClick={handleShare}
                 disabled={selectedGroups.length === 0 || isSharing}
                 loading={isSharing}
+                loadingText={selectedImage ? "Comprimindo e enviando..." : "Publicando..."}
                >
                  Compartilhar
                </Button>
@@ -3135,25 +3158,24 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
                   <div className="flex items-end justify-center gap-2 pt-8 pb-4 mb-4">
                     {/* 2nd Place Position */}
                     {sortedMembers[1] && (
-                      <div className="flex flex-col items-center gap-2 w-1/3">
+                      <div className={`flex flex-col items-center gap-2 w-1/3 transition-all duration-500 ${memberRanks[sortedMembers[1].uid] === 1 ? '-mt-4' : ''}`}>
                         <div className="relative group">
                           {memberRanks[sortedMembers[1].uid] === 1 && (
-                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-500 animate-pulse">
+                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-500 animate-bounce">
                               <Trophy size={16} fill="currentColor" />
                             </div>
                           )}
                           <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg z-10 ${
-                            memberRanks[sortedMembers[1].uid] === 1 ? 'bg-yellow-500 text-black' : 
+                            memberRanks[sortedMembers[1].uid] === 1 ? 'bg-yellow-500 text-black animate-pulse' : 
                             memberRanks[sortedMembers[1].uid] === 2 ? 'bg-gray-400 text-black' : 
                             'bg-orange-700/80 text-white'
                           }`}>#{memberRanks[sortedMembers[1].uid]}</div>
                           <img 
                             src={sortedMembers[1].photoURL || `https://picsum.photos/seed/${sortedMembers[1].uid}/100/100`} 
                             alt="" 
-                            className={`w-14 h-14 rounded-2xl border-2 object-cover ${
-                              memberRanks[sortedMembers[1].uid] === 1 ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 
-                              memberRanks[sortedMembers[1].uid] === 2 ? 'border-gray-400/30' : 
-                              'border-orange-700/30'
+                            className={`rounded-2xl border-2 object-cover transition-all duration-500 ${
+                              memberRanks[sortedMembers[1].uid] === 1 ? 'w-20 h-20 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.3)] rotate-0' : 
+                              'w-14 h-14 border-gray-400/30'
                             }`}
                             referrerPolicy="no-referrer"
                           />
@@ -3173,48 +3195,48 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
 
                     {/* 1st Place Position */}
                     {sortedMembers[0] && (
-                      <div className="flex flex-col items-center gap-3 w-1/3 -mt-4">
+                      <div className="flex flex-col items-center gap-3 w-1/3 -mt-6">
                         <div className="relative group">
-                          <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-500 animate-bounce">
-                            <Trophy size={20} fill="currentColor" />
+                          <div className="absolute -top-7 left-1/2 -translate-x-1/2 text-yellow-500 animate-bounce">
+                            <Trophy size={24} fill="currentColor" />
                           </div>
-                          <div className="absolute -inset-1 bg-yellow-500/20 blur-lg rounded-full animate-pulse"></div>
-                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-500 text-black px-2 py-0.5 rounded text-[9px] font-black uppercase italic shadow-xl z-10 border-b border-black/10">#1</div>
+                          <div className="absolute -inset-2 bg-yellow-500/20 blur-xl rounded-full animate-pulse"></div>
+                          <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-yellow-400 text-black px-2.5 py-0.5 rounded text-[10px] font-black uppercase italic shadow-xl z-20 border-b border-black/10">#1</div>
                           <img 
                             src={sortedMembers[0].photoURL || `https://picsum.photos/seed/${sortedMembers[0].uid}/100/100`} 
                             alt="" 
-                            className="w-20 h-20 rounded-[2rem] border-4 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.2)] object-cover relative z-1"
+                            className="w-24 h-24 rounded-[2.5rem] border-4 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.4)] object-cover relative z-10 transition-transform hover:scale-105"
                             referrerPolicy="no-referrer"
                           />
                         </div>
                         <div className="text-center">
-                          <p className="text-[11px] font-black uppercase tracking-tight truncate max-w-[100px] text-yellow-500">{sortedMembers[0].displayName}</p>
-                          <p className="text-[16px] font-black italic text-brand-primary">{getMemberScore(sortedMembers[0])} <span className="text-[10px] opacity-70">pts</span></p>
+                          <p className="text-[11px] font-black uppercase tracking-tight truncate max-w-[100px] text-yellow-500 drop-shadow-md">{sortedMembers[0].displayName}</p>
+                          <p className="text-[18px] font-black italic text-brand-primary drop-shadow-sm">{getMemberScore(sortedMembers[0])} <span className="text-[10px] opacity-70">pts</span></p>
                         </div>
                       </div>
                     )}
 
                     {/* 3rd Place Position */}
                     {sortedMembers[2] && (
-                      <div className="flex flex-col items-center gap-2 w-1/3">
+                      <div className={`flex flex-col items-center gap-2 w-1/3 transition-all duration-500 ${memberRanks[sortedMembers[2].uid] === 1 ? '-mt-4' : memberRanks[sortedMembers[2].uid] === 2 ? '-mt-2' : ''}`}>
                         <div className="relative group">
-                          {memberRanks[sortedMembers[2].uid] === 1 && (
-                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-500 animate-pulse">
+                          {(memberRanks[sortedMembers[2].uid] === 1 || memberRanks[sortedMembers[2].uid] === 2) && (
+                            <div className="absolute -top-5 left-1/2 -translate-x-1/2 text-yellow-500 animate-bounce">
                               <Trophy size={16} fill="currentColor" />
                             </div>
                           )}
                           <div className={`absolute -top-3 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded text-[8px] font-black uppercase italic shadow-lg z-10 ${
-                            memberRanks[sortedMembers[2].uid] === 1 ? 'bg-yellow-500 text-black' : 
+                            memberRanks[sortedMembers[2].uid] === 1 ? 'bg-yellow-500 text-black animate-pulse' : 
                             memberRanks[sortedMembers[2].uid] === 2 ? 'bg-gray-400 text-black' : 
                             'bg-orange-700/80 text-white'
                           }`}>#{memberRanks[sortedMembers[2].uid]}</div>
                           <img 
                             src={sortedMembers[2].photoURL || `https://picsum.photos/seed/${sortedMembers[2].uid}/100/100`} 
                             alt="" 
-                            className={`w-14 h-14 rounded-2xl border-2 object-cover ${
-                              memberRanks[sortedMembers[2].uid] === 1 ? 'border-yellow-500/50 shadow-[0_0_15px_rgba(234,179,8,0.2)]' : 
-                              memberRanks[sortedMembers[2].uid] === 2 ? 'border-gray-400/30' : 
-                              'border-orange-700/30'
+                            className={`rounded-2xl border-2 object-cover transition-all duration-500 ${
+                              memberRanks[sortedMembers[2].uid] === 1 ? 'w-20 h-20 border-yellow-500 shadow-[0_0_20px_rgba(234,179,8,0.3)]' : 
+                              memberRanks[sortedMembers[2].uid] === 2 ? 'w-16 h-16 border-gray-400' :
+                              'w-14 h-14 border-orange-700/30'
                             }`}
                             referrerPolicy="no-referrer"
                           />
@@ -3391,20 +3413,24 @@ function GroupFeedView({ group, currentUser }: { group: Group, currentUser: Fire
       try {
         setDeletingPostId(post.id);
         if (post.imageUrl) {
-          const imageRef = ref(storage, post.imageUrl);
-          await deleteObject(imageRef).catch(() => {});
+          try {
+            const imageRef = ref(storage, post.imageUrl);
+            await deleteObject(imageRef).catch(() => {});
+          } catch (storageErr) {
+            console.warn("Could not delete image, but continuing with post deletion", storageErr);
+          }
         }
         await deleteDoc(doc(db, 'groups', group.id, 'feed', post.id));
         setDeletingPostId(null);
       } catch (e) {
         console.error("Error deleting post:", e);
         setDeletingPostId(null);
-        alert("Erro ao excluir postagem.");
+        alert("Erro ao excluir postagem. Verifique sua conexão e permissões.");
       }
     } else {
       setDeletingPostId(post.id);
-      // Auto-reset after 3 seconds if not confirmed
-      setTimeout(() => setDeletingPostId(prev => prev === post.id ? null : prev), 3000);
+      // Auto-reset after 4 seconds if not confirmed (increased to 4 for better visibility)
+      setTimeout(() => setDeletingPostId(prev => prev === post.id ? null : prev), 4000);
     }
   };
 
