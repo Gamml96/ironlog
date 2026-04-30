@@ -106,7 +106,8 @@ const calculateEstimatedDuration = (plan: WorkoutPlan) => {
       totalSeconds += ex.targetDuration;
     } else {
       const setsNum = ex.targetSets || 1;
-      const rest = ex.restTimer || 60;
+      const restStr = String(ex.restTimer || "60");
+      const rest = parseInt(restStr.split(',')[0]) || 60;
       const timePerSet = 50; // Estimated execution time in seconds
       totalSeconds += (setsNum * timePerSet) + ((setsNum - 1) * rest);
     }
@@ -1250,7 +1251,7 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
         exerciseId: ex.id,
         targetSets: 3,
         targetReps: '10',
-        restTimer: defaultRest
+        restTimer: String(defaultRest)
       }]
     }));
     setShowExPicker(false);
@@ -1385,10 +1386,14 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
                               <div className="group relative">
                                 <HelpCircle size={14} className="text-muted-foreground/40 hover:text-brand-primary cursor-help transition-all" />
                                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-black/95 backdrop-blur-md border border-white/10 p-3 rounded-xl shadow-2xl text-[9px] leading-relaxed text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
-                                  Ao ativar <span className="text-brand-primary font-bold">Séries Variadas</span>, você pode definir repetições diferentes para cada série usando vírgulas.
+                                  Ao ativar <span className="text-brand-primary font-bold">Séries Variadas</span>, você pode definir repetições e tempos de descanso diferentes para cada série usando vírgulas.
                                   <div className="mt-2 pt-2 border-t border-white/5 flex items-center gap-2">
                                     <span className="text-gray-500 italic">Exemplo:</span>
                                     <span className="text-white font-mono bg-white/10 px-1.5 py-0.5 rounded leading-none">12, 10, 8</span>
+                                  </div>
+                                  <div className="mt-1 flex items-center gap-2">
+                                    <span className="text-gray-500 italic">Descanso:</span>
+                                    <span className="text-brand-primary font-mono bg-brand-primary/10 px-1.5 py-0.5 rounded leading-none text-[8px]">60, 45, 30</span>
                                   </div>
                                 </div>
                               </div>
@@ -1404,14 +1409,15 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
 
                         <div className="flex items-center gap-1">
                           <input 
-                            type="number"
+                            type={ex.isVariationPerSet ? "text" : "number"}
                             value={ex.restTimer}
                             onChange={(e) => {
                               const newExs = [...editedPlan.exercises];
-                              newExs[idx].restTimer = parseInt(e.target.value) || 0;
+                              newExs[idx].restTimer = e.target.value;
                               setEditedPlan({...editedPlan, exercises: newExs});
                             }}
                             className="w-12 h-8 bg-white/5 border border-white/10 rounded text-center text-xs text-brand-primary font-bold"
+                            placeholder="60"
                           />
                           <span className="text-[9px] uppercase font-bold text-gray-500">desc.</span>
                         </div>
@@ -1907,7 +1913,12 @@ function ActiveWorkoutOverlay({
     
     if (isNowCompleted) {
       if (window.navigator.vibrate) window.navigator.vibrate(50);
-      setRestTime(currentSession.exercises[exIdx].restTimer || 60); 
+      
+      // Get correct rest time for this set
+      const restVal = currentSession.exercises[exIdx].restTimer || "60";
+      const restParts = String(restVal).split(',').map(p => p.trim());
+      const restToUse = parseInt(restParts[setIdx] || restParts[restParts.length - 1]) || 60;
+      setRestTime(restToUse); 
       
       const allSetsDone = updatedExercises[exIdx].sets.every(s => s.completed);
       if (allSetsDone && window.navigator.vibrate) {

@@ -18,7 +18,7 @@ export interface SetLog {
 export interface ExerciseLog {
   exerciseId: string;
   exerciseName: string;
-  restTimer: number; // copied from plan
+  restTimer: string; // changed to string to support variations
   targetReps?: string; 
   targetDuration?: number; // in seconds
   isVariationPerSet?: boolean;
@@ -44,7 +44,7 @@ export interface WorkoutPlanExercise {
   targetDuration?: number; // in seconds
   isVariationPerSet?: boolean;
   notes?: string;
-  restTimer: number; // in seconds
+  restTimer: string; // changed to string to support variations
 }
 
 export interface WorkoutPlan {
