@@ -2076,7 +2076,7 @@ function ActiveWorkoutOverlay({
     const updatedExercises = currentSession.exercises.map((ex, i) => {
       if (i !== exIdx) return ex;
       const lastSet = ex.sets[ex.sets.length - 1];
-      const newSet = {
+      const newSet: ExerciseSet = {
         weight: lastSet?.weight || 0,
         reps: lastSet?.reps || 0,
         duration: lastSet?.duration || 0,
@@ -2085,6 +2085,21 @@ function ActiveWorkoutOverlay({
       };
       return { ...ex, sets: [...ex.sets, newSet] };
     });
+    setCurrentSession(prev => ({ ...prev, exercises: updatedExercises }));
+  };
+
+  const removeSet = (exIdx: number, setIdx: number) => {
+    const updatedExercises = currentSession.exercises.map((ex, i) => {
+      if (i !== exIdx) return ex;
+      if (ex.sets.length <= 1) return ex; // Keep at least one set
+      const updatedSets = ex.sets.filter((_, sIdx) => sIdx !== setIdx);
+      return { ...ex, sets: updatedSets };
+    });
+    setCurrentSession(prev => ({ ...prev, exercises: updatedExercises }));
+  };
+
+  const removeExerciseFromSession = (exIdx: number) => {
+    const updatedExercises = currentSession.exercises.filter((_, i) => i !== exIdx);
     setCurrentSession(prev => ({ ...prev, exercises: updatedExercises }));
   };
 
@@ -2275,9 +2290,17 @@ function ActiveWorkoutOverlay({
           const isTimeEx = ['Cardio', 'Lutas'].includes(detail?.muscleGroup || '');
           const planEx = session.exercises[exIdx]; // Original plan details if needed
           return (
-            <div key={exIdx} className="bg-bg-card rounded-[24px] p-6 border-l-4 border-l-brand-primary shadow-xl">
+            <div key={exIdx} className="bg-bg-card rounded-[24px] p-6 border-l-4 border-l-brand-primary shadow-xl relative group/ex">
                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-2xl italic font-black leading-tight">{detail?.name || 'Exercício'}</h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-2xl italic font-black leading-tight">{detail?.name || 'Exercício'}</h3>
+                    <button 
+                      onClick={() => removeExerciseFromSession(exIdx)}
+                      className="text-red-500/30 hover:text-red-500 p-1 transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                   <Badge variant="secondary">{ex.sets.length} séries</Badge>
                </div>
                
@@ -2362,16 +2385,16 @@ function ActiveWorkoutOverlay({
                     return (
                       <div 
                         key={setIdx} 
-                        className={`grid grid-cols-[40px_1fr_1fr_50px] items-center gap-3 p-2 rounded-xl transition-all duration-300 ${set.completed ? 'bg-brand-secondary/10 border-brand-secondary/20' : 'bg-[#252525]'}`}
+                        className={`grid grid-cols-[30px_1fr_1fr_40px_30px] items-center gap-2 p-2 rounded-xl transition-all duration-300 ${set.completed ? 'bg-brand-secondary/10 border-brand-secondary/20' : 'bg-[#252525]'}`}
                       >
-                         <div className="text-center font-display text-muted text-xl italic font-black">{setIdx + 1}</div>
+                         <div className="text-center font-display text-muted text-lg italic font-black">{setIdx + 1}</div>
                          <div className="flex flex-col">
                            <input 
                              type="number"
                              inputMode="decimal"
                              value={set.weight || ''}
                              onChange={(e) => updateSet(exIdx, setIdx, 'weight', parseFloat(e.target.value) || 0)}
-                             className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0 placeholder:text-white/30"
+                             className="w-full h-10 bg-transparent border-none rounded-lg text-center text-lg font-display font-black text-white focus:ring-0 placeholder:text-white/30"
                              placeholder={weightPlaceholder}
                            />
                          </div>
@@ -2387,15 +2410,21 @@ function ActiveWorkoutOverlay({
                                  updateSet(exIdx, setIdx, 'reps', parseInt(e.target.value) || 0);
                                }
                              }}
-                             className="w-full h-12 bg-transparent border-none rounded-lg text-center text-xl font-display font-black text-white focus:ring-0 placeholder:text-white/30"
+                             className="w-full h-10 bg-transparent border-none rounded-lg text-center text-lg font-display font-black text-white focus:ring-0 placeholder:text-white/30"
                              placeholder={repsPlaceholder}
                            />
                          </div>
                          <button 
                            onClick={() => toggleSet(exIdx, setIdx)}
-                           className={`h-10 w-10 flex items-center justify-center rounded-full transition-all border-2 ${set.completed ? 'bg-brand-secondary border-brand-secondary text-black' : 'bg-transparent border-muted/20 text-muted'}`}
+                           className={`h-9 w-9 flex items-center justify-center rounded-full transition-all border-2 ${set.completed ? 'bg-brand-secondary border-brand-secondary text-black' : 'bg-transparent border-muted/20 text-muted'}`}
                          >
-                           {set.completed ? <CheckCircle2 size={24} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-full bg-current" />}
+                           {set.completed ? <CheckCircle2 size={20} strokeWidth={3} /> : <div className="w-1.5 h-1.5 rounded-full bg-current" />}
+                         </button>
+                         <button 
+                           onClick={() => removeSet(exIdx, setIdx)}
+                           className="h-8 w-8 flex items-center justify-center text-red-500/20 hover:text-red-500 transition-colors"
+                         >
+                           <X size={14} />
                          </button>
                       </div>
                     );
