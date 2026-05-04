@@ -1934,7 +1934,7 @@ function ActiveWorkoutOverlay({
       setPreviousData(latestData);
     }
     loadData();
-  }, [currentSession.id]);
+  }, [currentSession.id, currentSession.exercises.length]);
 
   // Persist session progress to localStorage
   useEffect(() => {
@@ -2076,7 +2076,7 @@ function ActiveWorkoutOverlay({
     const updatedExercises = currentSession.exercises.map((ex, i) => {
       if (i !== exIdx) return ex;
       const lastSet = ex.sets[ex.sets.length - 1];
-      const newSet: ExerciseSet = {
+      const newSet: SetLog = {
         weight: lastSet?.weight || 0,
         reps: lastSet?.reps || 0,
         duration: lastSet?.duration || 0,
