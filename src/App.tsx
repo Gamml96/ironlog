@@ -1648,11 +1648,8 @@ function ShareWorkoutOverlay({
     const file = e.target.files?.[0];
     if (file) {
       setSelectedImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      const url = URL.createObjectURL(file);
+      setImagePreview(url);
     }
   };
 
@@ -1661,12 +1658,13 @@ function ShareWorkoutOverlay({
     try {
       let imageUrl = '';
       if (selectedImage) {
-        // Opções de compressão: mantendo qualidade mas reduzindo consideravelmente o peso
+        // Opções de compressão Ultra Rápidas
         const options = {
-          maxSizeMB: 0.8, // Max 0.8MB (aprox 800KB) - bom equilíbrio
-          maxWidthOrHeight: 1280, // Redimensionar se maior que 1280px
+          maxSizeMB: 1.0, 
+          maxWidthOrHeight: 720, // Resolução menor = muito mais rápido
           useWebWorker: true,
-          initialQuality: 0.7 // Reduzir levemente a qualidade inicial para maior compressão
+          initialQuality: 0.5, // Qualidade menor para comprimir em menos passagens
+          preserveExif: false 
         };
 
         try {
