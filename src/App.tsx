@@ -211,6 +211,31 @@ const Badge = ({ children, variant = 'primary' }: { children: React.ReactNode, v
 
 // --- Global Helpers ---
 
+const startEmptyWorkoutHelper = (plan: WorkoutPlan): WorkoutSession => {
+  return {
+    id: crypto.randomUUID(),
+    workoutPlanId: plan.id,
+    workoutPlanName: plan.name,
+    date: Date.now(),
+    exercises: plan.exercises.map(ex => ({
+      exerciseId: ex.exerciseId,
+      exerciseName: '', // Will be resolved by the execution component
+      restTimer: ex.restTimer,
+      targetReps: ex.targetReps,
+      targetDuration: ex.targetDuration,
+      isVariationPerSet: ex.isVariationPerSet,
+      sets: Array.from({ length: ex.targetSets || 1 }).map(() => ({
+        weight: 0,
+        reps: 0,
+        completed: false,
+        timestamp: Date.now()
+      }))
+    })),
+    totalVolume: 0,
+    isCompleted: false
+  };
+};
+
 const rotateWorkoutPlans = async (planId: string) => {
   try {
     const plansRef = getCollectionRef('plans');
@@ -448,7 +473,19 @@ export default function App() {
               user={user} 
             />
           )}
-          {activeTab === 'treinos' && <TreinosView />}
+          {activeTab === 'treinos' && (
+            <TreinosView 
+              onStartWorkout={(w) => {
+                if (activeWorkout && !activeWorkout.isCompleted) {
+                  if (confirm("Você já tem um treino em andamento. Deseja descartá-lo e começar um novo?")) {
+                    openWorkoutLayer(w);
+                  }
+                } else {
+                  openWorkoutLayer(w);
+                }
+              }}
+            />
+          )}
           {activeTab === 'progresso' && <ProgressoView />}
           {activeTab === 'exercicios' && <ExerciciosView />}
           {activeTab === 'grupos' && <GruposView currentUser={user} />}
@@ -904,28 +941,7 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
   };
 
   const startEmptyWorkout = (plan: WorkoutPlan) => {
-    const session: WorkoutSession = {
-      id: crypto.randomUUID(),
-      workoutPlanId: plan.id,
-      workoutPlanName: plan.name,
-      date: Date.now(),
-      exercises: plan.exercises.map(ex => ({
-        exerciseId: ex.exerciseId,
-        exerciseName: '', // Will be resolved
-        restTimer: ex.restTimer,
-        targetReps: ex.targetReps,
-        targetDuration: ex.targetDuration,
-        isVariationPerSet: ex.isVariationPerSet,
-        sets: Array.from({ length: ex.targetSets }).map(() => ({
-          weight: 0,
-          reps: 0,
-          completed: false,
-          timestamp: Date.now()
-        }))
-      })),
-      totalVolume: 0,
-      isCompleted: false
-    };
+    const session = startEmptyWorkoutHelper(plan);
     onStartWorkout(session);
   };
 
@@ -1132,9 +1148,9 @@ function HojeView({ onStartWorkout, onEditSession, onDeleteSession, onSetActiveT
 
 // --- View: Treinos (Plans Management) ---
 
-function TreinosView() {
+function TreinosView({ onStartWorkout }: { onStartWorkout: (s: WorkoutSession) => void }) {
   const [plans, setPlans] = useState<WorkoutPlan[]>([]);
-  const [isEditing, setIsEditing] = useState<WorkoutPlan | null>(null);
+  const [isEditing, setIsEditing] = useState<WorkoutPlan & { isOneOff?: boolean } | null>(null);
 
   useEffect(() => {
     const q = query(getCollectionRef('plans'), orderBy('order'));
@@ -1155,12 +1171,34 @@ function TreinosView() {
     setIsEditing(newPlan);
   };
 
+  const startOneOffWorkout = () => {
+    const newPlan: WorkoutPlan = {
+      id: 'one-off-' + crypto.randomUUID(),
+      name: 'Treino Avulso',
+      exercises: [],
+      order: -1
+    };
+    const session = startEmptyWorkoutHelper(newPlan);
+    onStartWorkout(session);
+  };
+
   const deletePlan = async (id: string) => {
     await deleteFromCloud('plans', id);
   };
 
   if (isEditing) {
-    return <EditPlanView plan={isEditing} onSave={() => setIsEditing(null)} onCancel={() => setIsEditing(null)} />;
+    return (
+      <EditPlanView 
+        plan={isEditing} 
+        onSave={() => setIsEditing(null)} 
+        onCancel={() => setIsEditing(null)} 
+        onStartOneOff={(plan) => {
+          const session = startEmptyWorkoutHelper(plan);
+          onStartWorkout(session);
+          setIsEditing(null);
+        }}
+      />
+    );
   }
 
   return (
@@ -1170,12 +1208,38 @@ function TreinosView() {
       exit={{ opacity: 0, x: -20 }}
       className="py-4 space-y-6"
     >
-      <header className="flex justify-between items-center">
-        <h1 className="text-3xl italic">Meus Planos</h1>
-        <Button variant="primary" size="icon" onClick={createPlan}><Plus /></Button>
+      <header className="flex flex-col gap-1">
+        <div className="flex justify-between items-center">
+          <h1 className="text-3xl italic">Meus Planos</h1>
+          <Button variant="primary" size="icon" onClick={createPlan}><Plus /></Button>
+        </div>
+        <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Configure suas rotinas ou inicie um treino rápido</p>
       </header>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4">
+        {/* One-off Workout Button Card */}
+        <Card 
+          onClick={startOneOffWorkout}
+          className="bg-brand-primary/5 border-brand-primary/20 hover:bg-brand-primary/10 transition-colors group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-brand-primary text-black rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+              <Play size={24} fill="currentColor" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black italic uppercase">Treino Avulso</h3>
+              <p className="text-[10px] text-brand-primary font-bold uppercase tracking-widest">Montar treino na hora</p>
+            </div>
+            <ArrowRight className="ml-auto text-brand-primary opacity-50 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+          </div>
+        </Card>
+
+        <div className="h-4 flex items-center gap-4">
+          <div className="h-[1px] flex-1 bg-white/5" />
+          <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Minhas Rotinas</span>
+          <div className="h-[1px] flex-1 bg-white/5" />
+        </div>
+
         {plans.map(plan => (
           <Card key={plan.id} className="group overflow-hidden">
             <div className="flex items-center justify-between mb-2">
@@ -1207,8 +1271,13 @@ function TreinosView() {
   );
 }
 
-function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (p: WorkoutPlan) => void, onCancel: () => void }) {
-  const [editedPlan, setEditedPlan] = useState<WorkoutPlan>(JSON.parse(JSON.stringify(plan)));
+function EditPlanView({ plan, onSave, onCancel, onStartOneOff }: { 
+  plan: WorkoutPlan & { isOneOff?: boolean }, 
+  onSave: (p: WorkoutPlan) => void, 
+  onCancel: () => void,
+  onStartOneOff?: (p: WorkoutPlan) => void
+}) {
+  const [editedPlan, setEditedPlan] = useState<WorkoutPlan & { isOneOff?: boolean }>(JSON.parse(JSON.stringify(plan)));
   const [showExPicker, setShowExPicker] = useState(false);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [exSearch, setExSearch] = useState('');
@@ -1287,6 +1356,11 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
   };
 
   const persist = async () => {
+    if (editedPlan.isOneOff && onStartOneOff) {
+      onStartOneOff(editedPlan);
+      return;
+    }
+
     setIsSaving(true);
     try {
       await saveToCloud('plans', editedPlan);
@@ -1300,8 +1374,15 @@ function EditPlanView({ plan, onSave, onCancel }: { plan: WorkoutPlan, onSave: (
     <div className="py-4 space-y-6">
       <header className="flex items-center gap-4">
         <Button variant="ghost" size="icon" onClick={onCancel} disabled={isSaving}><ChevronLeft /></Button>
-        <h1 className="text-2xl flex-1">Editar Plano</h1>
-        <Button variant="primary" size="sm" onClick={persist} loading={isSaving}>Salvar</Button>
+        <h1 className="text-2xl flex-1">{editedPlan.isOneOff ? 'Treino Avulso' : 'Editar Plano'}</h1>
+        <Button 
+          variant={editedPlan.isOneOff ? "primary" : "primary"} 
+          size="sm" 
+          onClick={persist} 
+          loading={isSaving}
+        >
+          {editedPlan.isOneOff ? 'Iniciar Treino' : 'Salvar'}
+        </Button>
       </header>
 
       <div className="space-y-4">
@@ -1777,6 +1858,53 @@ function ActiveWorkoutOverlay({
   const [isSaving, setIsSaving] = useState(false);
   const [showIncompleteWarning, setShowIncompleteWarning] = useState(false);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showExPicker, setShowExPicker] = useState(false);
+  const [exSearch, setExSearch] = useState('');
+  const [isAddingExercise, setIsAddingExercise] = useState(false);
+
+  const addExerciseToSession = (ex: Exercise) => {
+    const newExLog: ExerciseLog = {
+      exerciseId: ex.id,
+      exerciseName: ex.name,
+      restTimer: "60",
+      targetReps: "10",
+      sets: [{
+        weight: 0,
+        reps: 0,
+        completed: false,
+        timestamp: Date.now()
+      }, {
+        weight: 0,
+        reps: 0,
+        completed: false,
+        timestamp: Date.now()
+      }, {
+        weight: 0,
+        reps: 0,
+        completed: false,
+        timestamp: Date.now()
+      }]
+    };
+    
+    setCurrentSession(prev => ({
+      ...prev,
+      exercises: [...prev.exercises, newExLog]
+    }));
+    
+    setExerciseDetails(prev => ({
+      ...prev,
+      [ex.id]: ex
+    }));
+    
+    setShowExPicker(false);
+    setExSearch('');
+  };
+
+  const filteredExercises = DEFAULT_EXERCISES.concat((Object.values(exerciseDetails) as Exercise[]).filter(ed => !DEFAULT_EXERCISES.some(de => de.id === ed.id)))
+    .filter(ex => 
+      ex.name.toLowerCase().includes(exSearch.toLowerCase()) || 
+      ex.muscleGroup.toLowerCase().includes(exSearch.toLowerCase())
+    );
 
   useEffect(() => {
     async function loadData() {
@@ -1941,6 +2069,22 @@ function ActiveWorkoutOverlay({
       return { ...ex, sets: updatedSets };
     });
 
+    setCurrentSession(prev => ({ ...prev, exercises: updatedExercises }));
+  };
+
+  const addSet = (exIdx: number) => {
+    const updatedExercises = currentSession.exercises.map((ex, i) => {
+      if (i !== exIdx) return ex;
+      const lastSet = ex.sets[ex.sets.length - 1];
+      const newSet = {
+        weight: lastSet?.weight || 0,
+        reps: lastSet?.reps || 0,
+        duration: lastSet?.duration || 0,
+        completed: false,
+        timestamp: Date.now()
+      };
+      return { ...ex, sets: [...ex.sets, newSet] };
+    });
     setCurrentSession(prev => ({ ...prev, exercises: updatedExercises }));
   };
 
@@ -2111,6 +2255,21 @@ function ActiveWorkoutOverlay({
 
       <div className="flex-1 overflow-y-auto no-scrollbar pb-40">
         <div className="px-5 py-8 space-y-10">
+        {currentSession.exercises.length === 0 && (
+          <div 
+            onClick={() => setShowExPicker(true)}
+            className="py-20 flex flex-col items-center justify-center text-center space-y-6 opacity-80 cursor-pointer active:scale-95 transition-all group"
+          >
+            <div className="w-24 h-24 bg-brand-primary/10 rounded-full flex items-center justify-center border-2 border-dashed border-brand-primary/30 group-hover:border-brand-primary group-hover:bg-brand-primary/20 transition-all">
+              <Plus size={40} className="text-brand-primary" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-3xl italic font-black uppercase tracking-tight">Treino Vazio</h3>
+              <p className="text-sm font-bold uppercase tracking-[0.2em] text-brand-primary">O que vamos treinar hoje?</p>
+              <p className="text-xs text-gray-500 max-w-[200px] leading-relaxed mx-auto mt-4 uppercase font-bold tracking-widest">Toque no botão ou no ícone acima para adicionar seu primeiro exercício.</p>
+            </div>
+          </div>
+        )}
         {currentSession.exercises.map((ex, exIdx) => {
           const detail = exerciseDetails[ex.exerciseId];
           const isTimeEx = ['Cardio', 'Lutas'].includes(detail?.muscleGroup || '');
@@ -2241,12 +2400,80 @@ function ActiveWorkoutOverlay({
                       </div>
                     );
                   })}
+                  
+                  <button 
+                    onClick={() => addSet(exIdx)}
+                    className="w-full h-10 border border-dashed border-white/10 rounded-xl flex items-center justify-center gap-2 text-[10px] font-black uppercase text-gray-500 hover:text-brand-primary hover:border-brand-primary/30 transition-all active:scale-95 mt-2"
+                  >
+                    <Plus size={14} />
+                    Adicionar Série
+                  </button>
                </div>
             </div>
           );
         })}
+        
+        <div className="pt-4 px-4 pb-20">
+          <Button 
+            variant="secondary" 
+            className="w-full h-20 border-2 border-dashed border-white/10 flex items-center justify-center gap-4 active:scale-[0.98] transition-all bg-white/5 hover:bg-brand-primary/5 hover:border-brand-primary/30 group"
+            onClick={() => setShowExPicker(true)}
+          >
+            <div className="w-10 h-10 bg-brand-primary text-black rounded-xl flex items-center justify-center shadow-[0_0_15px_rgba(255,94,26,0.3)] group-hover:scale-110 transition-transform">
+              <Plus size={24} strokeWidth={3} />
+            </div>
+            <div className="text-left">
+              <span className="block text-lg font-black italic uppercase leading-none">Adicionar Exercício</span>
+              <span className="block text-[10px] font-bold uppercase tracking-widest text-brand-primary opacity-70">Expandir o treino agora</span>
+            </div>
+          </Button>
+        </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {showExPicker && (
+          <div className="fixed inset-0 bg-black/95 z-[300] p-4 flex flex-col pt-safe backdrop-blur-xl">
+             <header className="flex justify-between items-center mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-primary text-black rounded-xl flex items-center justify-center italic font-black">EX</div>
+                  <h2 className="text-2xl italic font-black uppercase tracking-tight">Escolher Exercício</h2>
+                </div>
+                <Button variant="ghost" size="icon" className="bg-white/5 border border-white/10 rounded-xl" onClick={() => { setShowExPicker(false); setExSearch(''); }}><X /></Button>
+             </header>
+             
+             <div className="relative mb-6">
+               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-primary w-5 h-5" />
+               <input 
+                 type="text"
+                 placeholder="Buscar exercício..."
+                 autoFocus
+                 value={exSearch}
+                 onChange={(e) => setExSearch(e.target.value)}
+                 className="w-full bg-white/5 border border-white/10 h-14 pl-12 pr-4 rounded-2xl outline-none focus:border-brand-primary text-white text-lg font-bold placeholder:text-white/20 transition-all focus:bg-white/10"
+               />
+             </div>
+
+             <div className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1 custom-scrollbar">
+                {filteredExercises.map(ex => (
+                  <div 
+                    key={ex.id} 
+                    onClick={() => addExerciseToSession(ex)}
+                    className="bg-white/5 p-5 rounded-2xl flex justify-between items-center active:bg-brand-primary active:text-black transition-all border border-white/5 active:scale-[0.97]"
+                  >
+                     <div>
+                        <p className="font-black text-sm uppercase tracking-tight">{ex.name}</p>
+                        <p className="text-[10px] uppercase text-brand-primary font-bold tracking-widest mt-0.5 opacity-70">{ex.muscleGroup}</p>
+                     </div>
+                     <div className="w-10 h-10 bg-brand-primary/10 rounded-xl flex items-center justify-center border border-brand-primary/20">
+                      <Plus size={18} className="text-brand-primary" />
+                     </div>
+                  </div>
+                ))}
+             </div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-bg-base via-bg-base to-transparent z-[120]">
         <Button 

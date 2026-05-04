@@ -52,6 +52,7 @@ export interface WorkoutPlan {
   name: string;
   exercises: WorkoutPlanExercise[];
   order: number;
+  isOneOff?: boolean;
 }
 
 export interface UserStats {
