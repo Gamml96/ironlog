@@ -1644,6 +1644,13 @@ function ShareWorkoutOverlay({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Limpeza de URLs de blob ao desmontar
+  useEffect(() => {
+    return () => {
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+    };
+  }, [imagePreview]);
+
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -1654,38 +1661,43 @@ function ShareWorkoutOverlay({
   };
 
   const handleShare = async () => {
+    if (selectedGroups.length === 0) return;
     setIsSharing(true);
     try {
       let imageUrl = '';
       if (selectedImage) {
-        // Opções de compressão Ultra Rápidas
+        // Opções de compressão Ultra Rápidas e compatíveis
         const options = {
-          maxSizeMB: 1.0, 
-          maxWidthOrHeight: 720, // Resolução menor = muito mais rápido
-          useWebWorker: true,
-          initialQuality: 0.5, // Qualidade menor para comprimir em menos passagens
+          maxSizeMB: 0.5, // Reduzido para 500KB - muito mais rápido
+          maxWidthOrHeight: 800, // Resolução ideal para redes sociais/feed
+          useWebWorker: false, // Desabilitado para evitar hangs em alguns ambientes
+          initialQuality: 0.6,
           preserveExif: false 
         };
 
         try {
-          // Status visual de compressão
+          // Usando um fallback para o nome do arquivo caso o objeto retornado seja um Blob
           const compressedFile = await imageCompression(selectedImage, options);
-          const imagePath = `users/${user.uid}/shares/${Date.now()}_${compressedFile.name}`;
+          const fileName = (compressedFile as File).name || selectedImage.name || 'image.jpg';
+          const imagePath = `users/${user.uid}/shares/${Date.now()}_${fileName}`;
+          
           const storageRef = ref(storage, imagePath);
           await uploadBytes(storageRef, compressedFile);
           imageUrl = await getDownloadURL(storageRef);
         } catch (compressionError) {
           console.error("Erro na compressão, enviando original:", compressionError);
-          const imagePath = `users/${user.uid}/shares/${Date.now()}_${selectedImage.name}`;
+          // Se falhar a compressão, tenta enviar original mas limita impacto
+          const imagePath = `users/${user.uid}/shares/${Date.now()}_original_${selectedImage.name}`;
           const storageRef = ref(storage, imagePath);
           await uploadBytes(storageRef, selectedImage);
           imageUrl = await getDownloadURL(storageRef);
         }
       }
 
-      await Promise.all(selectedGroups.map(async (groupId) => {
+      // Envia para o Firestore
+      const sharePromises = selectedGroups.map(async (groupId) => {
         const postRef = doc(collection(db, 'groups', groupId, 'feed'));
-        await setDoc(postRef, {
+        return setDoc(postRef, {
           id: postRef.id,
           userId: user.uid,
           userName: user.displayName || 'Atleta',
@@ -1698,10 +1710,16 @@ function ShareWorkoutOverlay({
           comments: [],
           createdAt: Date.now()
         });
-      }));
+      });
+
+      await Promise.all(sharePromises);
+      
+      // Limpeza
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
       onClose();
     } catch (e) {
-      console.error(e);
+      console.error("Erro geral no compartilhamento:", e);
+      alert("Houve um erro ao compartilhar. Verifique sua conexão.");
     } finally {
       setIsSharing(false);
     }
@@ -1820,9 +1838,9 @@ function ShareWorkoutOverlay({
                 loading={isSharing}
                 loadingText={selectedImage ? "Comprimindo e enviando..." : "Publicando..."}
                >
-                 Compartilhar
+                 <Share2 className="mr-2" size={18} /> Compartilhar
                </Button>
-               <Button variant="ghost" className="w-full" onClick={onClose} disabled={isSharing}>Agora não</Button>
+               <Button variant="ghost" className="w-full text-[10px] font-black uppercase opacity-50" onClick={onClose} disabled={isSharing}>Agora não</Button>
             </div>
           </div>
        </Card>
