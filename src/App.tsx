@@ -1666,31 +1666,37 @@ function ShareWorkoutOverlay({
     try {
       let imageUrl = '';
       if (selectedImage) {
-        // Opções de compressão Ultra Rápidas e compatíveis
+        // Opções de compressão Ultra Rápidas e Leves
         const options = {
-          maxSizeMB: 0.5, // Reduzido para 500KB - muito mais rápido
-          maxWidthOrHeight: 800, // Resolução ideal para redes sociais/feed
-          useWebWorker: false, // Desabilitado para evitar hangs em alguns ambientes
-          initialQuality: 0.6,
+          maxSizeMB: 0.2, // Reduzido para 200KB para upload instantâneo
+          maxWidthOrHeight: 640, // Resolução compacta mas nítida para celular
+          useWebWorker: true, // Reativado webworker pois agora o tamanho é menor
+          initialQuality: 0.5,
           preserveExif: false 
         };
 
         try {
-          // Usando um fallback para o nome do arquivo caso o objeto retornado seja um Blob
           const compressedFile = await imageCompression(selectedImage, options);
-          const fileName = (compressedFile as File).name || selectedImage.name || 'image.jpg';
+          // Garantir que temos um nome de arquivo válido
+          const fileName = (compressedFile as File).name || selectedImage.name || `img_${Date.now()}.jpg`;
           const imagePath = `users/${user.uid}/shares/${Date.now()}_${fileName}`;
           
           const storageRef = ref(storage, imagePath);
+          // Upload simples e rápido
           await uploadBytes(storageRef, compressedFile);
           imageUrl = await getDownloadURL(storageRef);
         } catch (compressionError) {
-          console.error("Erro na compressão, enviando original:", compressionError);
-          // Se falhar a compressão, tenta enviar original mas limita impacto
-          const imagePath = `users/${user.uid}/shares/${Date.now()}_original_${selectedImage.name}`;
-          const storageRef = ref(storage, imagePath);
-          await uploadBytes(storageRef, selectedImage);
-          imageUrl = await getDownloadURL(storageRef);
+          console.error("Erro na compressão:", compressionError);
+          // Tenta um último recurso: se o arquivo original for pequeno (< 1MB), envia. 
+          // Se for grande, cancela para não travar o app do usuário.
+          if (selectedImage.size < 1024 * 1024) {
+            const imagePath = `users/${user.uid}/shares/${Date.now()}_direct_${selectedImage.name}`;
+            const storageRef = ref(storage, imagePath);
+            await uploadBytes(storageRef, selectedImage);
+            imageUrl = await getDownloadURL(storageRef);
+          } else {
+            throw new Error("Imagem muito grande para enviar sem compressão. Tente outra foto.");
+          }
         }
       }
 
