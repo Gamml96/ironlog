@@ -267,6 +267,21 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'hoje' | 'treinos' | 'progresso' | 'exercicios' | 'grupos' | 'config'>('hoje');
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // Connection monitoring
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   const [activeWorkout, setActiveWorkout] = useState<WorkoutSession | null>(null);
   const [isWorkoutModalOpen, setIsWorkoutModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -529,6 +544,13 @@ export default function App() {
       )}
 
       {/* Bottom Navigation */}
+      {!isOnline && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50">
+          <div className="bg-amber-500 text-black px-4 py-1.5 rounded-full flex items-center gap-2 shadow-lg text-xs font-black uppercase tracking-tighter">
+            <AlertTriangle size={14} /> Modo Offline
+          </div>
+        </div>
+      )}
       <nav className="fixed bottom-0 left-0 right-0 bg-bg-card/90 backdrop-blur-xl border-t border-white/5 pb-safe z-40">
         <div className="flex items-center justify-around h-20 max-w-md mx-auto px-2">
           <NavButton icon={<LayoutDashboard />} label="Hoje" active={activeTab === 'hoje'} onClick={() => navigateTab('hoje')} />
@@ -1662,41 +1684,39 @@ function ShareWorkoutOverlay({
 
   const handleShare = async () => {
     if (selectedGroups.length === 0) return;
+    
+    // Check for network before starting
+    if (!navigator.onLine) {
+      alert("Você está offline. Conecte-se para compartilhar seu treino.");
+      return;
+    }
+
     setIsSharing(true);
     try {
       let imageUrl = '';
       if (selectedImage) {
         // Opções de compressão Ultra Rápidas e Leves
         const options = {
-          maxSizeMB: 0.2, // Reduzido para 200KB para upload instantâneo
-          maxWidthOrHeight: 640, // Resolução compacta mas nítida para celular
-          useWebWorker: true, // Reativado webworker pois agora o tamanho é menor
+          maxSizeMB: 0.15, // Ainda menor para garantir rapidez extrema
+          maxWidthOrHeight: 640,
+          useWebWorker: true,
           initialQuality: 0.5,
           preserveExif: false 
         };
 
         try {
           const compressedFile = await imageCompression(selectedImage, options);
-          // Garantir que temos um nome de arquivo válido
           const fileName = (compressedFile as File).name || selectedImage.name || `img_${Date.now()}.jpg`;
           const imagePath = `users/${user.uid}/shares/${Date.now()}_${fileName}`;
           
           const storageRef = ref(storage, imagePath);
-          // Upload simples e rápido
+          
           await uploadBytes(storageRef, compressedFile);
           imageUrl = await getDownloadURL(storageRef);
         } catch (compressionError) {
-          console.error("Erro na compressão:", compressionError);
-          // Tenta um último recurso: se o arquivo original for pequeno (< 1MB), envia. 
-          // Se for grande, cancela para não travar o app do usuário.
-          if (selectedImage.size < 1024 * 1024) {
-            const imagePath = `users/${user.uid}/shares/${Date.now()}_direct_${selectedImage.name}`;
-            const storageRef = ref(storage, imagePath);
-            await uploadBytes(storageRef, selectedImage);
-            imageUrl = await getDownloadURL(storageRef);
-          } else {
-            throw new Error("Imagem muito grande para enviar sem compressão. Tente outra foto.");
-          }
+          console.error("Erro na compressão ou upload:", compressionError);
+          // Se falhar a compressão ou upload, avisamos mas não tentamos original gigante
+          throw new Error("Não foi possível enviar a imagem. Tente sem foto ou com uma conexão melhor.");
         }
       }
 
@@ -1724,8 +1744,9 @@ function ShareWorkoutOverlay({
       if (imagePreview) URL.revokeObjectURL(imagePreview);
       onClose();
     } catch (e) {
-      console.error("Erro geral no compartilhamento:", e);
-      alert("Houve um erro ao compartilhar. Verifique sua conexão.");
+      const err = e as Error;
+      console.error("Erro geral no compartilhamento:", err);
+      alert(err.message || "Houve um erro ao compartilhar. Verifique sua conexão.");
     } finally {
       setIsSharing(false);
     }
