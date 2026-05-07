@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, memo, useCallback } from 'react';
 import { 
   Plus, 
   Users, 
@@ -33,6 +33,41 @@ import { GroupDetailsView } from '../groups/GroupDetailsView';
 interface GruposViewProps {
   currentUser: FirebaseUser;
 }
+
+// Memoized Group Item Component
+const GroupItem = memo(({ group, onClick }: { group: Group; onClick: (g: Group) => void }) => (
+  <Card 
+    onClick={() => onClick(group)}
+    className="group relative overflow-hidden transition-all hover:border-brand-primary/40 active:scale-[0.98] cursor-pointer"
+  >
+    <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+       <Users size={60} />
+    </div>
+     <h3 className="text-xl font-black italic mb-1 uppercase">{group.name}</h3>
+     <div className="flex flex-wrap items-center gap-2 mb-4">
+        <div className="flex items-center gap-1.5 bg-brand-primary/10 px-2 py-1 rounded-lg border border-brand-primary/10">
+           <Calendar size={10} className="text-brand-primary" />
+           <span className="text-[8px] font-black uppercase text-brand-primary">Até {new Date(group.endDate).toLocaleDateString()}</span>
+        </div>
+        <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
+           {group.rankingType === 'workouts' ? <Trophy size={10} className="text-brand-secondary" /> : <Flame size={10} className="text-brand-secondary" />}
+           <span className="text-[8px] font-black uppercase text-muted">{group.rankingType === 'workouts' ? 'Treinos' : 'Frequência'}</span>
+        </div>
+     </div>
+    <div className="flex items-center gap-3">
+       <div className="flex -space-x-2">
+          {group.memberIds.slice(0, 4).map((_, i) => (
+            <div key={i} className="w-6 h-6 rounded-full bg-white/10 border border-bg-base flex items-center justify-center text-[8px] font-black italic text-brand-primary">
+              {i === 3 && group.memberIds.length > 3 ? `+${group.memberIds.length - 3}` : 'U'}
+            </div>
+          ))}
+       </div>
+       <span className="text-[10px] text-muted uppercase font-bold tracking-widest">{group.memberIds.length} membros</span>
+    </div>
+  </Card>
+));
+
+GroupItem.displayName = 'GroupItem';
 
 export function GruposView({ currentUser }: GruposViewProps) {
   const [groups, setGroups] = useState<Group[]>([]);
@@ -73,6 +108,10 @@ export function GruposView({ currentUser }: GruposViewProps) {
     return () => unsub();
   }, [currentUser.uid]);
 
+  const handleGroupClick = useCallback((group: Group) => {
+    setActiveGroup(group);
+  }, []);
+
   const createGroup = async () => {
     if (!groupName.trim() || !newGroupStartDate || !newGroupEndDate) return;
     setIsActing(true);
@@ -110,7 +149,6 @@ export function GruposView({ currentUser }: GruposViewProps) {
       setActiveGroup(newGroup);
     } catch (err) {
       console.error(err);
-      alert("Erro ao criar grupo.");
     } finally {
       setIsActing(false);
     }
@@ -123,7 +161,7 @@ export function GruposView({ currentUser }: GruposViewProps) {
       const q = query(collection(db, 'groups'), where('inviteCode', '==', inviteCode.trim().toUpperCase()));
       const snap = await getDocs(q);
       if (snap.empty) {
-        alert("Código inválido ou grupo não encontrado!");
+        alert("Código inválido!");
         setIsActing(false);
         return;
       }
@@ -131,7 +169,6 @@ export function GruposView({ currentUser }: GruposViewProps) {
       const group = groupDoc.data() as Group;
       
       if (group.memberIds.includes(currentUser.uid)) {
-        alert("Você já faz parte deste grupo!");
         setActiveGroup(group);
         setShowJoin(false);
         setIsActing(false);
@@ -147,11 +184,6 @@ export function GruposView({ currentUser }: GruposViewProps) {
       setActiveGroup({ ...group, memberIds: [...group.memberIds, currentUser.uid] });
     } catch (err: any) {
       console.error("Join Group Error:", err);
-      if (err?.code === 'permission-denied') {
-        alert("Erro de permissão: Você não tem permissão para entrar neste grupo.");
-      } else {
-        alert("Erro ao entrar no grupo. Verifique sua conexão ou o código informado.");
-      }
     } finally {
       setIsActing(false);
     }
@@ -183,54 +215,31 @@ export function GruposView({ currentUser }: GruposViewProps) {
         <div className="flex justify-center py-20">
           <Dumbbell className="animate-spin text-brand-primary w-8 h-8" />
         </div>
-      ) : groups.length > 0 ? (
-        <div className="grid gap-4">
-           {groups.map(g => (
-              <Card 
-                key={g.id} 
-                onClick={() => setActiveGroup(g)}
-                className="group relative overflow-hidden transition-all hover:border-brand-primary/40 active:scale-[0.98] cursor-pointer"
-              >
-                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                   <Users size={60} />
-                </div>
-                 <h3 className="text-xl font-black italic mb-1 uppercase">{g.name}</h3>
-                 <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <div className="flex items-center gap-1.5 bg-brand-primary/10 px-2 py-1 rounded-lg border border-brand-primary/10">
-                       <Calendar size={10} className="text-brand-primary" />
-                       <span className="text-[8px] font-black uppercase text-brand-primary">Até {new Date(g.endDate).toLocaleDateString()}</span>
-                    </div>
-                    <div className="flex items-center gap-1.5 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
-                       {g.rankingType === 'workouts' ? <Trophy size={10} className="text-brand-secondary" /> : <Flame size={10} className="text-brand-secondary" />}
-                       <span className="text-[8px] font-black uppercase text-muted">{g.rankingType === 'workouts' ? 'Treinos' : 'Frequência'}</span>
-                    </div>
-                 </div>
-                <div className="flex items-center gap-3">
-                   <div className="flex -space-x-2">
-                      {g.memberIds.slice(0, 4).map((_, i) => (
-                        <div key={i} className="w-6 h-6 rounded-full bg-white/10 border border-bg-base flex items-center justify-center text-[8px] font-black italic text-brand-primary">
-                          {i === 3 ? `+${g.memberIds.length - 3}` : 'U'}
-                        </div>
-                      ))}
-                   </div>
-                   <span className="text-[10px] text-muted uppercase font-bold tracking-widest">{g.memberIds.length} membros</span>
-                </div>
-              </Card>
-           ))}
-        </div>
       ) : (
-        <div className="text-center py-20 space-y-6">
-           <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto text-gray-700">
-              <Users size={40} />
-           </div>
-           <div className="space-y-2">
-              <h3 className="text-lg font-black italic uppercase">Treinar em grupo é melhor.</h3>
-              <p className="text-gray-500 text-sm px-8 leading-relaxed">Crie um grupo privado e convide seus amigos para comparar treinos e motivar uns aos outros.</p>
-           </div>
-           <div className="flex flex-col gap-3 px-6">
-              <Button onClick={() => setShowCreate(true)}>Criar Grupo</Button>
-              <Button variant="secondary" onClick={() => setShowJoin(true)}>Entrar com Código</Button>
-           </div>
+        <div className="grid gap-4">
+          {groups.length > 0 ? (
+            groups.map(g => (
+              <GroupItem 
+                key={g.id}
+                group={g}
+                onClick={handleGroupClick}
+              />
+            ))
+          ) : (
+            <div className="text-center py-20 space-y-6">
+              <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto text-gray-700">
+                  <Users size={40} />
+              </div>
+              <div className="space-y-2">
+                  <h3 className="text-lg font-black italic uppercase">Treinar em grupo é melhor.</h3>
+                  <p className="text-gray-500 text-sm px-8 leading-relaxed">Crie um grupo privado e convide seus amigos para comparar treinos e motivar uns aos outros.</p>
+              </div>
+              <div className="flex flex-col gap-3 px-6">
+                  <Button onClick={() => setShowCreate(true)}>Criar Grupo</Button>
+                  <Button variant="secondary" onClick={() => setShowJoin(true)}>Entrar com Código</Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
