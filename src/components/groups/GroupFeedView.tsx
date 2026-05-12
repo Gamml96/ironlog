@@ -82,7 +82,7 @@ const PostCard = memo(({
   setDeletingCommentId: (val: {postId: string, index: number} | null) => void;
   deletingPostId: string | null;
 }) => {
-  const isPostOwner = post.userId === currentUser.uid;
+  const isPostOwner = post.authorId === currentUser.uid;
   const isGroupAdmin = creatorId === currentUser.uid;
   const isEditing = editingPostId === post.id;
   const isDeleting = deletingPostId === post.id;
@@ -116,7 +116,7 @@ const PostCard = memo(({
         <div className="flex items-center gap-3">
           <div className="relative">
             <img 
-              src={post.userPhoto || `https://picsum.photos/seed/${post.userId}/100/100`} 
+              src={post.authorPhoto || `https://picsum.photos/seed/${post.authorId}/100/100`} 
               alt="" 
               className="w-10 h-10 rounded-2xl border border-white/10 object-cover"
               referrerPolicy="no-referrer"
@@ -128,7 +128,7 @@ const PostCard = memo(({
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
-              <h4 className="font-bold text-[13px] truncate uppercase tracking-tight leading-none">{post.userName}</h4>
+              <h4 className="font-bold text-[13px] truncate uppercase tracking-tight leading-none">{post.authorName}</h4>
               {(isPostOwner || isGroupAdmin) && (
                 <div className="flex gap-1.5">
                   {isPostOwner && !isEditing && (
@@ -196,7 +196,7 @@ const PostCard = memo(({
           </div>
         )}
 
-        {post.type === 'workout' && post.workoutData && (
+        {post.type === 'workout' && post.data && (
           <div className="bg-gradient-to-br from-brand-primary/10 to-brand-primary/5 border border-brand-primary/20 rounded-3xl p-5 space-y-4 relative overflow-hidden group/workout shadow-lg">
             <div className="absolute -right-4 -bottom-4 text-brand-primary/5 group-hover:rotate-12 transition-transform duration-700">
               <Trophy size={100} />
@@ -207,12 +207,12 @@ const PostCard = memo(({
                   <Flame size={20} fill="currentColor" />
                 </div>
                 <div>
-                  <h5 className="text-[12px] font-black italic uppercase text-white tracking-tight">{post.workoutData.workoutPlanName}</h5>
+                  <h5 className="text-[12px] font-black italic uppercase text-white tracking-tight">{post.data.workoutPlanName}</h5>
                   <p className="text-[9px] font-extrabold text-brand-primary uppercase tracking-widest">Treino Finalizado</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-[18px] font-black italic text-brand-primary leading-none tracking-tighter">{post.workoutData.totalVolume.toLocaleString('pt-BR')}kg</p>
+                <p className="text-[18px] font-black italic text-brand-primary leading-none tracking-tighter">{post.data.totalVolume?.toLocaleString('pt-BR')}kg</p>
                 <p className="text-[9px] font-bold text-muted uppercase tracking-widest mt-1">Volume Total</p>
               </div>
             </div>
@@ -220,11 +220,11 @@ const PostCard = memo(({
             <div className="grid grid-cols-2 gap-4 relative z-10 border-t border-white/5 pt-4">
               <div className="flex items-center gap-2">
                  <Dumbbell size={14} className="text-muted" />
-                 <p className="text-[10px] font-bold uppercase text-gray-300">{post.workoutData.exercises.length} Exercícios</p>
+                 <p className="text-[10px] font-bold uppercase text-gray-300">{post.data.exercises?.length} Exercícios</p>
               </div>
               <div className="flex items-center gap-2">
                  <Timer size={14} className="text-muted" />
-                 <p className="text-[10px] font-bold uppercase text-gray-300">{Math.floor((post.workoutData.duration || 0)/60)} Minutos</p>
+                 <p className="text-[10px] font-bold uppercase text-gray-300">{Math.floor((post.data.duration || 0)/60)} Minutos</p>
               </div>
             </div>
 
@@ -270,13 +270,13 @@ const PostCard = memo(({
                   <div className="space-y-3 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                       {post.comments.sort((a,b) => a.createdAt - b.createdAt).map((comm, idx) => (
                         <div key={`${post.id}-comm-${idx}`} className="flex gap-2 group/comment">
-                           <img src={comm.userPhoto || `https://picsum.photos/seed/${comm.userId}/100/100`} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0" referrerPolicy="no-referrer" loading="lazy" />
+                           <img src={comm.authorPhoto || `https://picsum.photos/seed/${comm.authorId}/100/100`} alt="" className="w-6 h-6 rounded-lg object-cover shrink-0" referrerPolicy="no-referrer" loading="lazy" />
                            <div className="bg-white/5 rounded-2xl p-2 flex-1 min-w-0 relative">
                               <div className="flex justify-between items-baseline gap-2">
-                                 <span className="text-[9px] font-black uppercase text-brand-primary truncate">{comm.userName}</span>
+                                 <span className="text-[9px] font-black uppercase text-brand-primary truncate">{comm.authorName}</span>
                                  <div className="flex items-center gap-2">
                                     <span className="text-[7px] text-muted whitespace-nowrap">{formatDistanceToNow(comm.createdAt, { addSuffix: true, locale: ptBR })}</span>
-                                    {(comm.userId === currentUser.uid || isGroupAdmin) && (
+                                    {(comm.authorId === currentUser.uid || isGroupAdmin) && (
                                       <button 
                                         type="button"
                                         onClick={() => handleDeleteComment(idx)}
@@ -294,7 +294,7 @@ const PostCard = memo(({
                                     )}
                                  </div>
                               </div>
-                              <p className="text-[11px] text-gray-300 leading-tight mt-0.5">{comm.text}</p>
+                              <p className="text-[11px] text-gray-300 leading-tight mt-0.5">{comm.content}</p>
                            </div>
                         </div>
                       ))}
@@ -366,10 +366,11 @@ export function GroupFeedView({ group, currentUser }: GroupFeedViewProps) {
     try {
       const postRef = doc(db, 'groups', group.id, 'feed', post.id);
       const newComment = {
-        userId: currentUser.uid,
-        userName: currentUser.displayName || 'Atleta',
-        userPhoto: currentUser.photoURL,
-        text: text.trim(),
+        id: crypto.randomUUID(),
+        authorId: currentUser.uid,
+        authorName: currentUser.displayName || 'Atleta',
+        authorPhoto: currentUser.photoURL || '',
+        content: text.trim(),
         createdAt: Date.now()
       };
       await updateDoc(postRef, {

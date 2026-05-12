@@ -91,83 +91,6 @@ export function ProgressoView({ key }: { key?: React.Key } = {}) {
       </header>
 
       <section className="space-y-6">
-        <div className="flex items-center gap-3 px-1">
-           <div className="h-6 w-1 bg-yellow-500 rounded-full" />
-           <h2 className="text-sm font-black uppercase italic tracking-widest text-white/80">Recordes Pessoais</h2>
-        </div>
-        
-        {personalRecords.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4">
-            {personalRecords.map((pr, idx) => {
-              const muscleGroup = pr.muscleGroup || 'Extra';
-              
-              return (
-                <motion.div
-                  key={pr.exerciseId}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: idx * 0.05 }}
-                >
-                  <Card className="flex items-center gap-4 py-5 px-6 relative overflow-hidden group hover:border-yellow-500/40 border-white/5 transition-all">
-                    <div className="absolute -right-4 -bottom-4 text-white/[0.03] rotate-12 group-hover:rotate-0 transition-transform duration-500 pointer-events-none">
-                      <Activity size={100} />
-                    </div>
-
-                    <div className="w-12 h-12 bg-white/5 rounded-2xl flex flex-col items-center justify-center border border-white/5 shrink-0 group-hover:bg-yellow-500/10 group-hover:border-yellow-500/20 transition-colors">
-                      <Trophy size={20} className="text-yellow-500/40 group-hover:text-yellow-500 transition-colors" />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                         <h4 className="font-black text-sm italic uppercase truncate text-white/90">{pr.exerciseName}</h4>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-brand-primary bg-brand-primary/5 px-2 py-0.5 rounded-lg border border-brand-primary/10">{muscleGroup}</span>
-                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{format(pr.date, 'dd MMM yy', { locale: ptBR })}</span>
-                      </div>
-                    </div>
-
-                    <div className="text-right shrink-0 relative z-10 flex items-center gap-4">
-                      <div className="flex flex-col items-end">
-                        <div className="flex items-baseline gap-1.5 justify-end">
-                          <span className="text-3xl font-display font-black italic tracking-tighter text-white tabular-nums">{(pr.weight || 0)}</span>
-                          <span className="text-[10px] font-black text-brand-primary uppercase italic">kg</span>
-                        </div>
-                        <div className="flex items-center gap-1 justify-end bg-white/5 px-2 py-0.5 rounded-lg border border-white/5 min-w-[70px]">
-                          <span className="text-lg font-display font-black italic text-brand-secondary tabular-nums">{Number(pr.reps || 0)}</span>
-                          <span className="text-[8px] font-black text-muted uppercase tracking-wider">Reps</span>
-                        </div>
-                      </div>
-                      
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(`Remover recorde de ${pr.exerciseName}?`)) {
-                            deletePersonalRecord(auth.currentUser?.uid || '', pr.exerciseId);
-                          }
-                        }}
-                        className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors border border-white/5"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
-        ) : (
-          <Card className="text-center py-12 bg-white/[0.02] border-dashed border-white/10">
-            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 grayscale opacity-40">
-              <Trophy size={32} />
-            </div>
-            <h3 className="text-sm font-black italic uppercase text-gray-500 mb-1">Ainda sem marcas pro</h3>
-            <p className="text-[10px] text-muted uppercase font-bold tracking-widest px-8">Seus PRs aparecerão aqui ao finalizar treinos pesados!</p>
-          </Card>
-        )}
-      </section>
-
-      <section className="space-y-6">
         <div className="flex justify-between items-center px-1">
            <div className="flex items-center gap-3">
               <div className="h-6 w-1 bg-brand-primary rounded-full" />
@@ -283,6 +206,83 @@ export function ProgressoView({ key }: { key?: React.Key } = {}) {
              )}
            </div>
         </Card>
+      </section>
+
+      <section className="space-y-6">
+        <div className="flex items-center gap-3 px-1">
+           <div className="h-6 w-1 bg-yellow-500 rounded-full" />
+           <h2 className="text-sm font-black uppercase italic tracking-widest text-white/80">Recordes Pessoais</h2>
+        </div>
+        
+        {personalRecords.length > 0 ? (
+          <div className="grid grid-cols-1 gap-4">
+            {personalRecords.map((pr, idx) => {
+              const muscleGroup = pr.muscleGroup || 'Extra';
+              
+              return (
+                <motion.div
+                  key={pr.exerciseId}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                >
+                  <Card className="flex items-center gap-4 py-5 px-6 relative overflow-hidden group hover:border-yellow-500/40 border-white/5 transition-all">
+                    <div className="absolute -right-4 -bottom-4 text-white/[0.03] rotate-12 group-hover:rotate-0 transition-transform duration-500 pointer-events-none">
+                      <Activity size={100} />
+                    </div>
+
+                    <div className="w-12 h-12 bg-white/5 rounded-2xl flex flex-col items-center justify-center border border-white/5 shrink-0 group-hover:bg-yellow-500/10 group-hover:border-yellow-500/20 transition-colors">
+                      <Trophy size={20} className="text-yellow-500/40 group-hover:text-yellow-500 transition-colors" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                         <h4 className="font-black text-sm italic uppercase truncate text-white/90">{pr.exerciseName}</h4>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[9px] font-black uppercase tracking-widest text-brand-primary bg-brand-primary/5 px-2 py-0.5 rounded-lg border border-brand-primary/10">{muscleGroup}</span>
+                        <span className="text-[9px] text-gray-500 font-bold uppercase tracking-widest">{format(pr.date, 'dd MMM yy', { locale: ptBR })}</span>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0 relative z-10 flex items-center gap-4">
+                      <div className="flex flex-col items-end">
+                        <div className="flex items-baseline gap-1.5 justify-end">
+                          <span className="text-3xl font-display font-black italic tracking-tighter text-white tabular-nums">{(pr.weight || 0)}</span>
+                          <span className="text-[10px] font-black text-brand-primary uppercase italic">kg</span>
+                        </div>
+                        <div className="flex items-center gap-1 justify-end bg-white/5 px-2 py-0.5 rounded-lg border border-white/5 min-w-[70px]">
+                          <span className="text-lg font-display font-black italic text-brand-secondary tabular-nums">{Number(pr.reps || 0)}</span>
+                          <span className="text-[8px] font-black text-muted uppercase tracking-wider">Reps</span>
+                        </div>
+                      </div>
+                      
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Remover recorde de ${pr.exerciseName}?`)) {
+                            deletePersonalRecord(auth.currentUser?.uid || '', pr.exerciseId);
+                          }
+                        }}
+                        className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-gray-500 hover:text-red-500 hover:bg-red-500/10 transition-colors border border-white/5"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </div>
+        ) : (
+          <Card className="text-center py-12 bg-white/[0.02] border-dashed border-white/10">
+            <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-4 grayscale opacity-40">
+              <Trophy size={32} />
+            </div>
+            <h3 className="text-sm font-black italic uppercase text-gray-500 mb-1">Ainda sem marcas pro</h3>
+            <p className="text-[10px] text-muted uppercase font-bold tracking-widest px-8">Seus PRs aparecerão aqui ao finalizar treinos pesados!</p>
+          </Card>
+        )}
       </section>
     </motion.div>
   );
