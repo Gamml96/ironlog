@@ -417,10 +417,29 @@ export function GroupDetailsView({ group, onBack, currentUser }: GroupDetailsVie
 
           {/* Feed Section */}
           <section className="space-y-4">
-             <div className="flex items-center gap-2 px-2">
-                <MessageSquare size={16} className="text-brand-primary" />
-                <h2 className="text-[12px] font-black uppercase tracking-[0.2em] text-white/50 italic">Atividade Recente</h2>
+             <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-2">
+                  <MessageSquare size={16} className="text-brand-primary" />
+                  <h2 className="text-[12px] font-black uppercase tracking-[0.2em] text-white/50 italic">Atividade Recente</h2>
+                </div>
+                <div className="bg-brand-primary/10 px-2 py-0.5 rounded-lg border border-brand-primary/10">
+                   <p className="text-[8px] font-black uppercase text-brand-primary tracking-tighter italic">Feed em Tempo Real</p>
+                </div>
              </div>
+             
+             {/* Simple Post Create Input as part of the group feed interaction */}
+             <Card className="bg-white/5 border-white/5 p-4 space-y-4">
+                <div className="flex gap-3">
+                   <img src={currentUser.photoURL || `https://picsum.photos/seed/${currentUser.uid}/100/100`} alt="" className="w-8 h-8 rounded-xl object-cover shrink-0" referrerPolicy="no-referrer" />
+                   <div className="flex-1 bg-black/20 rounded-2xl p-3 border border-white/5">
+                      <p className="text-muted text-[11px] font-bold italic">Compartilhe sua motivação com o grupo...</p>
+                   </div>
+                </div>
+                <div className="flex justify-end pt-1">
+                   <p className="text-[9px] text-muted font-bold uppercase tracking-widest opacity-40 italic">Os treinos finalizados aparecem aqui automaticamente!</p>
+                </div>
+             </Card>
+
              <GroupFeedView group={group} currentUser={currentUser} />
           </section>
         </div>

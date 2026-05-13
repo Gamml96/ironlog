@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Search, 
   X, 
@@ -7,36 +7,15 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  getDocs 
+  getDocs, 
+  collection 
 } from 'firebase/firestore';
 
 import { Exercise } from '../../lib/db';
-import { getCollectionRef, saveToCloud } from '../../lib/firebase';
+import { db, getCollectionRef, saveToCloud } from '../../lib/firebase';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
-
-// Memoized Exercise Item Component
-const ExerciseItem = memo(({ ex }: { ex: Exercise }) => (
-  <Card className="flex items-center justify-between group hover:border-brand-primary/30 transition-all cursor-pointer">
-     <div className="flex items-center gap-4">
-        <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-muted group-hover:text-brand-primary transition-colors">
-           <Dumbbell size={20} />
-        </div>
-        <div>
-           <h4 className="font-bold text-sm tracking-tight uppercase">{ex.name}</h4>
-           <p className="text-[10px] uppercase text-muted font-bold tracking-widest">{ex.muscleGroup}</p>
-        </div>
-     </div>
-     <div className="flex items-center gap-3">
-        {ex.isCustom && (
-          <span className="text-[8px] font-black uppercase bg-brand-primary/10 text-brand-primary border border-brand-primary/20 px-2 py-0.5 rounded-md">Custom</span>
-        )}
-        <ChevronRight size={16} className="text-gray-700" />
-     </div>
-  </Card>
-));
-
-ExerciseItem.displayName = 'ExerciseItem';
+import { Badge } from '../ui/Badge';
 
 export function ExerciciosView({ key }: { key?: React.Key } = {}) {
   const [search, setSearch] = useState('');
@@ -45,8 +24,6 @@ export function ExerciciosView({ key }: { key?: React.Key } = {}) {
   const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [newExName, setNewExName] = useState('');
   const [newExGroup, setNewExGroup] = useState('Peito');
-
-  const groups = useMemo(() => ['Todos', 'Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core', 'Cardio', 'Lutas'], []);
 
   useEffect(() => {
     loadExercises();
@@ -64,7 +41,7 @@ export function ExerciciosView({ key }: { key?: React.Key } = {}) {
     }
   }
 
-  const createCustom = useCallback(async () => {
+  const createCustom = async () => {
     if (!newExName.trim()) return;
     const newEx: Exercise = {
       id: crypto.randomUUID(),
@@ -76,16 +53,15 @@ export function ExerciciosView({ key }: { key?: React.Key } = {}) {
     await loadExercises();
     setIsAddingCustom(false);
     setNewExName('');
-  }, [newExName, newExGroup]);
+  };
 
-  const filtered = useMemo(() => {
-    const searchTerm = search.toLowerCase();
-    return exercises.filter(ex => {
-      const matchesSearch = (ex.name || '').toLowerCase().includes(searchTerm);
-      const matchesFilter = filter === 'Todos' || ex.muscleGroup === filter;
-      return matchesSearch && matchesFilter;
-    });
-  }, [exercises, search, filter]);
+  const groups = ['Todos', 'Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core', 'Cardio', 'Lutas'];
+
+  const filtered = exercises.filter(ex => {
+    const matchesSearch = (ex.name || '').toLowerCase().includes((search || '').toLowerCase());
+    const matchesFilter = filter === 'Todos' || ex.muscleGroup === filter;
+    return matchesSearch && matchesFilter;
+  });
 
   return (
     <motion.div 
@@ -123,7 +99,23 @@ export function ExerciciosView({ key }: { key?: React.Key } = {}) {
 
       <div className="space-y-2">
          {filtered.map(ex => (
-           <ExerciseItem key={ex.id} ex={ex} />
+           <Card key={ex.id} className="flex items-center justify-between group hover:border-brand-primary/30 transition-all cursor-pointer">
+              <div className="flex items-center gap-4">
+                 <div className="w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center text-muted group-hover:text-brand-primary transition-colors">
+                    <Dumbbell size={20} />
+                 </div>
+                 <div>
+                    <h4 className="font-bold text-sm tracking-tight uppercase">{ex.name}</h4>
+                    <p className="text-[10px] uppercase text-muted font-bold tracking-widest">{ex.muscleGroup}</p>
+                 </div>
+              </div>
+              <div className="flex items-center gap-3">
+                 {ex.isCustom && (
+                   <span className="text-[8px] font-black uppercase bg-brand-primary/10 text-brand-primary border border-brand-primary/20 px-2 py-0.5 rounded-md">Custom</span>
+                 )}
+                 <ChevronRight size={16} className="text-gray-700" />
+              </div>
+           </Card>
          ))}
 
          {filtered.length === 0 && (
@@ -166,7 +158,7 @@ export function ExerciciosView({ key }: { key?: React.Key } = {}) {
                         onChange={(e) => setNewExGroup(e.target.value)}
                         className="w-full bg-black/40 border border-white/10 rounded-xl h-12 px-4 focus:border-brand-primary outline-none text-white text-sm appearance-none"
                       >
-                         {groups.slice(1).map(g => (
+                         {['Peito', 'Costas', 'Pernas', 'Ombros', 'Braços', 'Core', 'Cardio', 'Lutas'].map(g => (
                            <option key={g} value={g}>{g}</option>
                          ))}
                       </select>

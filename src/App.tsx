@@ -294,6 +294,7 @@ export default function App() {
         <ActiveWorkoutOverlay 
           session={activeWorkout} 
           weightIncrement={weightIncrement}
+          userGroups={userGroups}
           onClose={(updated) => {
             setActiveWorkout(updated);
             closeWorkoutLayer();

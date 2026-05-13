@@ -84,25 +84,32 @@ export interface GroupMember {
 export interface GroupPost {
   id: string;
   groupId: string;
-  authorId: string;
-  authorName: string;
-  authorPhoto: string;
+  userId: string;
+  userName: string;
+  userPhoto: string;
   type: 'text' | 'workout' | 'image';
   content: string;
-  data?: any; // Session data
-  imageUrl?: string; // Image URL
-  likes: string[]; // User IDs
+  workoutData?: {
+    workoutPlanName: string;
+    totalVolume: number;
+    duration: number;
+    exercises: {
+      exerciseName: string;
+      setsCount: number;
+    }[];
+  };
+  imageUrl?: string;
+  likes: string[];
   comments: GroupComment[];
   createdAt: number;
   lastUpdated?: number;
 }
 
 export interface GroupComment {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorPhoto: string;
-  content: string;
+  userId: string;
+  userName: string;
+  userPhoto: string;
+  text: string;
   createdAt: number;
 }
 

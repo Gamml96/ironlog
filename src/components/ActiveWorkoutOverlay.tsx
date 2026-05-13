@@ -9,10 +9,14 @@ import {
   Search, 
   Trophy, 
   X, 
-  ChevronLeft 
+  ChevronLeft,
+  Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
+  collection,
+  doc,
+  setDoc,
   getDocs, 
   query, 
   orderBy, 
@@ -24,12 +28,15 @@ import {
   Exercise, 
   ExerciseLog, 
   SetLog, 
-  DEFAULT_EXERCISES 
+  DEFAULT_EXERCISES,
+  Group,
+  GroupPost
 } from '../lib/db';
 import { 
   auth, 
   getCollectionRef, 
-  updateUserStats 
+  updateUserStats,
+  db
 } from '../lib/firebase';
 import { 
   calculateSessionVolume, 
@@ -42,6 +49,7 @@ import { Badge } from './ui/Badge';
 interface ActiveWorkoutOverlayProps {
   session: WorkoutSession;
   weightIncrement?: number;
+  userGroups?: Group[];
   onClose: (updatedSession: WorkoutSession) => void;
   onDiscard: () => void;
   onSave: (w: WorkoutSession) => void;
@@ -50,6 +58,7 @@ interface ActiveWorkoutOverlayProps {
 export function ActiveWorkoutOverlay({ 
   session, 
   weightIncrement = 2.5,
+  userGroups = [],
   onClose, 
   onDiscard, 
   onSave 
@@ -67,6 +76,15 @@ export function ActiveWorkoutOverlay({
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [showExPicker, setShowExPicker] = useState(false);
   const [exSearch, setExSearch] = useState('');
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([]);
+  const [shareNotes, setShareNotes] = useState('');
+
+  // Auto-select all joined groups by default
+  useEffect(() => {
+    if (userGroups.length > 0 && selectedGroupIds.length === 0) {
+      setSelectedGroupIds(userGroups.map(g => g.id));
+    }
+  }, [userGroups]);
 
   const addExerciseToSession = (ex: Exercise) => {
     const newExLog: ExerciseLog = {
@@ -325,9 +343,49 @@ export function ActiveWorkoutOverlay({
       
       if (!isEditing) {
         await updateUserStats(auth.currentUser?.uid || '', totalVol);
+        
+        // Handle Group Sharing
+        if (selectedGroupIds.length > 0 && auth.currentUser) {
+          console.log(`Sharing workout to ${selectedGroupIds.length} groups`);
+          const user = auth.currentUser;
+          const workoutData = {
+            workoutPlanName: finalizedSession.workoutPlanName || 'Treino Sem Nome',
+            totalVolume: finalizedSession.totalVolume || 0,
+            duration: finalizedSession.duration || 0,
+            exercises: (finalizedSession.exercises || []).map(ex => ({
+              exerciseName: ex.exerciseName || 'Exercício',
+              setsCount: (ex.sets || []).length
+            }))
+          };
+
+          for (const gId of selectedGroupIds) {
+            try {
+              const feedRef = collection(db, 'groups', gId, 'feed');
+              const postRef = doc(feedRef);
+              const postData: Omit<GroupPost, 'id'> = {
+                groupId: gId,
+                userId: user.uid,
+                userName: user.displayName || 'Atleta',
+                userPhoto: user.photoURL || '',
+                type: 'workout',
+                content: shareNotes.trim(),
+                workoutData: workoutData,
+                likes: [],
+                comments: [],
+                createdAt: Date.now()
+              };
+              await setDoc(postRef, postData);
+            } catch (postErr) {
+              console.error(`Failed to share to group ${gId}:`, postErr);
+            }
+          }
+        }
       }
 
       await onSave(finalizedSession);
+    } catch (error) {
+      console.error("Error finishing workout:", error);
+      alert("Erro ao salvar treino. Verifique sua conexão.");
     } finally {
       setIsSaving(false);
     }
@@ -710,25 +768,62 @@ export function ActiveWorkoutOverlay({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-6 z-[200]"
+            className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center p-6 z-[200] overflow-y-auto"
           >
-             <Card className="w-full max-w-sm space-y-6 text-center border-brand-primary/20">
-                <motion.div 
-                  initial={{ scale: 0.5, rotate: -20 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  className="flex justify-center"
-                >
-                   <div className="w-20 h-20 bg-brand-primary/20 rounded-full flex items-center justify-center text-brand-primary shadow-[0_0_30px_rgba(255,94,26,0.3)]">
-                      <Trophy size={40} className="animate-bounce" />
+             <Card className="w-full max-w-sm space-y-6 border-brand-primary/20 my-auto">
+                <div className="flex items-center gap-4">
+                   <div className="w-16 h-16 bg-brand-primary/20 rounded-2xl flex items-center justify-center text-brand-primary shadow-[0_0_30px_rgba(255,94,26,0.2)] shrink-0">
+                      <Trophy size={32} className="animate-bounce" />
                    </div>
-                </motion.div>
-                <div>
-                   <h2 className="text-3xl italic font-black uppercase">Parabéns!</h2>
-                   <p className="text-gray-400 text-sm font-medium">Treino concluído com sucesso. Deseja registrar a sessão?</p>
+                   <div className="text-left">
+                      <h2 className="text-2xl italic font-black uppercase leading-tight">Parabéns!</h2>
+                      <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">Missão Cumprida</p>
+                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                   <Button variant="secondary" className="h-12 italic font-black" onClick={() => setIsFinishing(false)} disabled={isSaving}>AINDA NÃO</Button>
-                   <Button variant="primary" className="h-12 italic font-black" onClick={finishWorkout} loading={isSaving}>REGISTRAR!</Button>
+
+                <div className="space-y-4">
+                   <div className="bg-white/5 rounded-2xl p-4 border border-white/5 space-y-3">
+                      <label className="text-[10px] font-black uppercase text-brand-primary tracking-widest block">O que achou do treino?</label>
+                      <textarea 
+                        value={shareNotes}
+                        onChange={(e) => setShareNotes(e.target.value)}
+                        placeholder="Ex: Novo PR no supino! 🔥"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm text-white outline-none focus:border-brand-primary transition-all resize-none h-20 placeholder:text-white/20"
+                      />
+                   </div>
+
+                   {userGroups.length > 0 && (
+                     <div className="space-y-3">
+                        <label className="text-[10px] font-black uppercase text-muted tracking-widest block ml-1">Compartilhar com Grupos</label>
+                        <div className="flex flex-wrap gap-2">
+                           {userGroups.map(group => (
+                             <button
+                               key={group.id}
+                               onClick={() => {
+                                 setSelectedGroupIds(prev => 
+                                   prev.includes(group.id) 
+                                   ? prev.filter(id => id !== group.id)
+                                   : [...prev, group.id]
+                                 )
+                               }}
+                               className={`px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-tighter border transition-all flex items-center gap-2 ${
+                                 selectedGroupIds.includes(group.id)
+                                 ? 'bg-brand-primary border-brand-primary text-black'
+                                 : 'bg-white/5 border-white/10 text-muted hover:bg-white/10'
+                               }`}
+                             >
+                               {selectedGroupIds.includes(group.id) ? <CheckCircle2 size={12} strokeWidth={3} /> : <Users size={12} />}
+                               {group.name}
+                             </button>
+                           ))}
+                        </div>
+                     </div>
+                   )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                   <Button variant="secondary" className="h-14 font-black italic uppercase text-xs" onClick={() => setIsFinishing(false)} disabled={isSaving}>VOLTAR</Button>
+                   <Button variant="primary" className="h-14 font-black italic uppercase text-xs shadow-lg shadow-brand-primary/20" onClick={finishWorkout} loading={isSaving}>REGISTRAR!</Button>
                 </div>
              </Card>
           </motion.div>

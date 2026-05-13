@@ -15,7 +15,7 @@ import { getCollectionRef, saveToCloud } from './firebase';
 export const calculateEstimatedDuration = (plan: WorkoutPlan) => {
   const restTime = plan.exercises.reduce((acc, ex) => {
     const sets = ex.targetSets || 3;
-    const rest = parseInt(String(ex.restTimer).split(',')[0]) || 60;
+    const rest = parseInt(String(ex.restTimer || '60').split(',')[0]) || 60;
     return acc + (sets * rest);
   }, 0);
   const workTime = plan.exercises.length * 5 * 60; // 5 mins per exercise
