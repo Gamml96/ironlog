@@ -1,6 +1,118 @@
-export * from './types';
+export interface Exercise {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  secondaryMuscles?: string[];
+  isCustom?: boolean;
+}
 
-import { Exercise } from './types';
+export interface SetLog {
+  weight: number;
+  reps: number;
+  duration?: number; // in seconds, for cardio
+  rpe?: number;
+  completed: boolean;
+  timestamp: number;
+}
+
+export interface ExerciseLog {
+  exerciseId: string;
+  exerciseName: string;
+  restTimer: string; // changed to string to support variations
+  targetReps?: string; 
+  targetDuration?: number; // in seconds
+  isVariationPerSet?: boolean;
+  sets: SetLog[];
+  notes?: string;
+}
+
+export interface WorkoutSession {
+  id: string;
+  workoutPlanId: string;
+  workoutPlanName: string;
+  date: number;
+  duration?: number; // in seconds
+  exercises: ExerciseLog[];
+  totalVolume: number;
+  isCompleted: boolean;
+}
+
+export interface WorkoutPlanExercise {
+  exerciseId: string;
+  targetSets: number;
+  targetReps: string; // e.g., "8-12" or "12,10,8"
+  targetDuration?: number; // in seconds
+  isVariationPerSet?: boolean;
+  notes?: string;
+  restTimer: string; // changed to string to support variations
+}
+
+export interface WorkoutPlan {
+  id: string;
+  name: string;
+  exercises: WorkoutPlanExercise[];
+  order: number;
+  isOneOff?: boolean;
+}
+
+export interface UserStats {
+  id: string;
+  bodyWeightRecords: { date: number; weight: number }[];
+  streak: number;
+  lastWorkoutDate?: number;
+  defaultRestTime?: number; // in seconds
+  defaultWeightIncrement?: number; // e.g., 2.5
+}
+
+export interface PersonalRecord {
+  exerciseId: string;
+  exerciseName: string;
+  muscleGroup?: string;
+  weight: number;
+  reps: number;
+  date: number;
+  sessionId: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  inviteCode: string;
+  creatorId: string;
+  memberIds: string[];
+  createdAt: number;
+  startDate: number;
+  endDate: number;
+  rankingType: 'workouts' | 'frequency';
+}
+
+export interface GroupPost {
+  id: string;
+  userId: string;
+  userName: string;
+  userPhoto?: string;
+  type: 'text' | 'workout';
+  content?: string;
+  imageUrl?: string;
+  workoutData?: WorkoutSession;
+  likes: string[];
+  comments: {
+    userId: string;
+    userName: string;
+    text: string;
+    timestamp: number;
+  }[];
+  createdAt: number;
+}
+
+export interface GroupMemberStats {
+  userId: string;
+  displayName: string;
+  photoURL?: string;
+  totalVolume: number;
+  workoutCount: number;
+  lastWorkoutDate?: number;
+}
 
 export const DEFAULT_EXERCISES: Exercise[] = [
   // Peito

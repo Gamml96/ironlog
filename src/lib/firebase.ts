@@ -21,7 +21,6 @@ import {
   where,
   arrayUnion,
   arrayRemove,
-  enableIndexedDbPersistence,
   writeBatch as firebaseWriteBatch
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -57,65 +56,35 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Use initializeFirestore to allow for persistence later
+// Use getFirestore with the database ID
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-
-// Enable persistence for better offline experience
-try {
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      // Multiple tabs open, persistence can only be enabled in one tab at a time.
-      console.warn('Firestore persistence failed: Multiple tabs open');
-    } else if (err.code === 'unimplemented') {
-      // The current browser doesn't support all of the features required to enable persistence
-      console.warn('Firestore persistence not supported by browser');
-    }
-  });
-} catch (e) {
-  console.log("Persistence initialization skipped or failed.");
-}
 
 export const googleProvider = new GoogleAuthProvider();
 
 // Connection test as per integration guidelines
-async function testConnection(retries = 3) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      // Attempt to fetch a doc from the server to verify connectivity
-      // We use a longer timeout or just handle it gracefully
-      await getDocFromServer(doc(db, '_connection_test_', 'test'));
-      console.log("Firestore connection verified.");
-      return; // Exit if successful
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      
-      // "Missing or insufficient permissions" actually means we reached the server successfully
-      if (errorMsg.includes('insufficient permissions')) {
-        console.log("Firestore connection verified (via permission response).");
-        return;
-      }
+async function testConnection() {
+  try {
+    // Attempt to fetch a doc from the server to verify connectivity
+    await getDocFromServer(doc(db, '_connection_test_', 'test'));
+    console.log("Firestore connection verified.");
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    
+    // "Missing or insufficient permissions" actually means we reached the server successfully
+    if (errorMsg.includes('insufficient permissions')) {
+      console.log("Firestore connection verified (via permission response).");
+      return;
+    }
 
-      const isOfflineOrUnavailable = errorMsg.includes('the client is offline') || 
-                                     errorMsg.includes('unavailable') || 
-                                     errorMsg.includes('network-error');
-
-      if (isOfflineOrUnavailable) {
-        if (i < retries - 1) {
-          console.warn(`Firestore connection attempt ${i + 1} failed, retrying...`);
-          await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2s before retry
-          continue;
-        }
-        
-        // If all retries fail
-        console.error("Firestore connectivity error: Proceeding in offline mode. The backend may be temporarily unavailable.");
-        console.info("Debug Info for support:", {
-          projectId: firebaseConfig.projectId,
-          databaseId: firebaseConfig.firestoreDatabaseId
-        });
-      } else {
-        console.error("Firestore connectivity check failed with unexpected error:", error);
-        break; // Don't retry for other errors
-      }
+    if (errorMsg.includes('the client is offline') || errorMsg.includes('unavailable')) {
+      console.error("Firestore connectivity error: The client is offline or the backend is unavailable. Please check your Firebase configuration or internet connection.");
+      console.error("Debug Info:", {
+        projectId: firebaseConfig.projectId,
+        databaseId: firebaseConfig.firestoreDatabaseId,
+        error: errorMsg
+      });
+    } else {
+      console.error("Firestore connectivity check failed:", error);
     }
   }
 }
