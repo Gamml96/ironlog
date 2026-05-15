@@ -48,6 +48,17 @@
       },
       "required": ["weight", "date"]
     },
+    "FCMToken": {
+      "title": "FCM Token",
+      "description": "FCM device token for push notifications",
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "updatedAt": { "type": "number" },
+        "device": { "type": "string" }
+      },
+      "required": ["token", "updatedAt"]
+    },
     "Group": {
       "title": "Group",
       "description": "Private competition group",
@@ -114,6 +125,10 @@
     "/users/{userId}/settings/{settingId}": {
       "schema": "object",
       "description": "App settings"
+    },
+    "/users/{userId}/fcm_tokens/{tokenId}": {
+      "schema": "FCMToken",
+      "description": "Device tokens for push notifications"
     }
   }
 }

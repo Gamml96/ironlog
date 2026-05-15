@@ -97,6 +97,12 @@ import {
 } from './lib/firebase';
 import { PersonalRecord } from './lib/db';
 
+import { 
+  requestNotificationPermission, 
+  registerFCMToken, 
+  notifyGroup 
+} from './lib/notifications';
+
 // --- Utilities ---
 
 const calculateEstimatedDuration = (plan: WorkoutPlan) => {
@@ -380,12 +386,14 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setAuthLoading(false);
+      
+      if (u) {
+        // Request and register FCM token
+        requestNotificationPermission().then(token => {
+          if (token) console.log('Successfully registered for notifications');
+        });
+      }
     });
-
-    // Request notification permissions
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
 
     return () => unsubscribe();
   }, []);
@@ -1698,6 +1706,15 @@ function ShareWorkoutOverlay({
           comments: [],
           createdAt: Date.now()
         });
+
+        // Trigger notification
+        notifyGroup(
+          groupId, 
+          user.uid, 
+          user.displayName || 'Atleta', 
+          workout.workoutPlanName, 
+          workout.totalVolume
+        ).catch(err => console.error("Notification failed", err));
       }));
       onClose();
     } catch (e) {

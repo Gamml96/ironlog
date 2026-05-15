@@ -2,5 +2,5 @@
   "name": "IronLog",
   "description": "Aplicativo de rastreamento de treinos mobile-first com ranking global, sincronização em nuvem e foco em progressão de carga.",
   "requestFramePermissions": ["camera"],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
