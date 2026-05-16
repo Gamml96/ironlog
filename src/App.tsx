@@ -389,6 +389,9 @@ export default function App() {
       
       if (u) {
         // Request and register FCM token
+        if (window.self !== window.top) {
+          console.warn("Notifications might not work inside an iframe. Please open the app in a new tab to enable them.");
+        }
         requestNotificationPermission().then(token => {
           if (token) console.log('Successfully registered for notifications');
         });

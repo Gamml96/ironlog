@@ -26,24 +26,28 @@ export async function registerFCMToken() {
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
 
     const messaging = getMessaging();
+    console.log('Attempting to get FCM token...');
     const token = await getToken(messaging, {
       serviceWorkerRegistration: registration
-      // If we had a VAPID key, we would put it here:
-      // vapidKey: '...'
     });
 
     if (token && auth.currentUser) {
+      console.log('FCM Token received:', token);
       const tokenRef = doc(collection(db, "users", auth.currentUser.uid, "fcm_tokens"), token);
       await setDoc(tokenRef, {
         token,
         updatedAt: Date.now(),
         device: navigator.userAgent
       });
-      console.log("FCM Token registered:", token);
       return token;
+    } else {
+      console.warn('No FCM token received or user not logged in.');
     }
   } catch (error) {
     console.error("Error registering FCM token:", error);
+    if (error instanceof Error && error.message.includes('permission')) {
+      console.error("Push permission denied by user or browser.");
+    }
   }
   return null;
 }

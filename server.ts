@@ -45,6 +45,7 @@ async function startServer() {
       
       // Filter out the sender
       const recipientIds = memberIds.filter((id: string) => id !== userId);
+      console.log(`Group ${groupId}: Found ${memberIds.length} members, ${recipientIds.length} are recipients.`);
 
       if (recipientIds.length === 0) {
         return res.json({ success: true, message: "No recipients" });
@@ -63,6 +64,7 @@ async function startServer() {
       });
 
       await Promise.all(tokenPromises);
+      console.log(`Found ${tokens.length} FCM tokens for recipients.`);
 
       if (tokens.length === 0) {
         return res.json({ success: true, message: "No tokens found" });
@@ -95,7 +97,8 @@ async function startServer() {
         },
         data: {
           groupId,
-          type: "workout_alert"
+          type: "workout_alert",
+          link: "/groups"
         },
         tokens: Array.from(new Set(tokens)), // Unique tokens
       };
