@@ -17,13 +17,19 @@ export async function requestNotificationPermission() {
 
 export async function registerFCMToken() {
   try {
+    if (!('serviceWorker' in navigator)) {
+      console.log('Service Worker not supported');
+      return null;
+    }
+
+    // Register service worker explicitly
+    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+
     const messaging = getMessaging();
-    // VAPID key is usually required for web push. 
-    // In many cases, it's provided in the Firebase Console under Cloud Messaging.
-    // If not provided, it might work without it if configured correctly, but usually needed.
-    // For now, we'll try without it or use a common placeholder if known.
     const token = await getToken(messaging, {
-      serviceWorkerRegistration: await navigator.serviceWorker.ready
+      serviceWorkerRegistration: registration
+      // If we had a VAPID key, we would put it here:
+      // vapidKey: '...'
     });
 
     if (token && auth.currentUser) {

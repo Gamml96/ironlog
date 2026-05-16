@@ -74,6 +74,25 @@ async function startServer() {
           title: `Treino Registrado no ${groupData?.name || 'Grupo'}!`,
           body: `${userName} acabou de detonar um treino de ${workoutName} com ${volume.toLocaleString('pt-BR')}kg! 🔥`,
         },
+        webpush: {
+          headers: {
+            Urgency: "high",
+          },
+          notification: {
+            body: `${userName} acabou de detonar um treino de ${workoutName} com ${volume.toLocaleString('pt-BR')}kg! 🔥`,
+            icon: "/favicon.ico",
+            requireInteraction: true,
+            actions: [
+              {
+                action: "view",
+                title: "Ver Treino"
+              }
+            ]
+          },
+          fcmOptions: {
+            link: "/groups"
+          }
+        },
         data: {
           groupId,
           type: "workout_alert"
@@ -82,6 +101,25 @@ async function startServer() {
       };
 
       const response = await fcm.sendEachForMulticast(message);
+      
+      console.log(`Successfully sent to ${response.successCount} tokens. ${response.failureCount} tokens failed.`);
+      
+      // Optional: Cleanup invalid tokens
+      if (response.failureCount > 0) {
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const error = resp.error;
+            if (error?.code === 'messaging/registration-token-not-registered' ||
+                error?.code === 'messaging/invalid-registration-token') {
+              // Token is invalid, should be removed from DB
+              const invalidToken = tokens[idx];
+              console.log(`Cleaning up invalid token: ${invalidToken}`);
+              // Note: We don't have the UID here easily without more lookups, 
+              // but we can query by token if needed.
+            }
+          }
+        });
+      }
       
       res.json({ 
         success: true, 
