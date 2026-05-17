@@ -37,6 +37,7 @@ async function startServer() {
       // 1. Get group members
       const groupDoc = await db.collection("groups").doc(groupId).get();
       if (!groupDoc.exists) {
+        console.warn(`Notify Group: Group ${groupId} not found`);
         return res.status(404).json({ error: "Group not found" });
       }
 
@@ -45,14 +46,13 @@ async function startServer() {
       
       // Filter out the sender
       const recipientIds = memberIds.filter((id: string) => id !== userId);
-      console.log(`Group ${groupId}: Found ${memberIds.length} members, ${recipientIds.length} are recipients.`);
+      console.log(`Group notification request for ${groupId}: ${memberIds.length} total members, ${recipientIds.length} recipients found.`);
 
       if (recipientIds.length === 0) {
-        return res.json({ success: true, message: "No recipients" });
+        return res.json({ success: true, message: "No recipients to notify" });
       }
 
       // 2. Get FCM tokens for recipients
-      // We'll look for tokens in /users/{userId}/fcm_tokens/
       const tokens: string[] = [];
       const tokenPromises = recipientIds.map(async (uid: string) => {
         const tokensSnap = await db.collection("users").doc(uid).collection("fcm_tokens").get();
@@ -64,25 +64,29 @@ async function startServer() {
       });
 
       await Promise.all(tokenPromises);
-      console.log(`Found ${tokens.length} FCM tokens for recipients.`);
+      console.log(`Found ${tokens.length} FCM tokens for recipients of group ${groupId}.`);
 
       if (tokens.length === 0) {
+        console.warn(`No FCM tokens found for recipients in group ${groupId}. Directing recipients to register for push notifications.`);
         return res.json({ success: true, message: "No tokens found" });
       }
 
       // 3. Send notifications
+      const uniqueTokens = Array.from(new Set(tokens));
       const message = {
         notification: {
           title: `Treino Registrado no ${groupData?.name || 'Grupo'}!`,
-          body: `${userName} acabou de detonar um treino de ${workoutName} com ${volume.toLocaleString('pt-BR')}kg! 🔥`,
+          body: `${userName} acabou de detonar um treino de ${workoutName}! 🔥`,
         },
         webpush: {
           headers: {
             Urgency: "high",
           },
           notification: {
-            body: `${userName} acabou de detonar um treino de ${workoutName} com ${volume.toLocaleString('pt-BR')}kg! 🔥`,
+            title: `Treino Registrado no ${groupData?.name || 'Grupo'}!`,
+            body: `${userName} acabou de detonar um treino de ${workoutName}! 🔥`,
             icon: "/favicon.ico",
+            badge: "/favicon.ico",
             requireInteraction: true,
             actions: [
               {
@@ -100,29 +104,11 @@ async function startServer() {
           type: "workout_alert",
           link: "/groups"
         },
-        tokens: Array.from(new Set(tokens)), // Unique tokens
+        tokens: uniqueTokens,
       };
 
       const response = await fcm.sendEachForMulticast(message);
-      
-      console.log(`Successfully sent to ${response.successCount} tokens. ${response.failureCount} tokens failed.`);
-      
-      // Optional: Cleanup invalid tokens
-      if (response.failureCount > 0) {
-        response.responses.forEach((resp, idx) => {
-          if (!resp.success) {
-            const error = resp.error;
-            if (error?.code === 'messaging/registration-token-not-registered' ||
-                error?.code === 'messaging/invalid-registration-token') {
-              // Token is invalid, should be removed from DB
-              const invalidToken = tokens[idx];
-              console.log(`Cleaning up invalid token: ${invalidToken}`);
-              // Note: We don't have the UID here easily without more lookups, 
-              // but we can query by token if needed.
-            }
-          }
-        });
-      }
+      console.log(`FCM send success for group ${groupId}. Success: ${response.successCount}, Failure: ${response.failureCount}`);
       
       res.json({ 
         success: true, 

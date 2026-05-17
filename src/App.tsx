@@ -2837,6 +2837,43 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
            </div>
         </Card>
 
+        <Card className="space-y-4">
+           <div>
+              <div className="flex justify-between items-center h-12">
+                 <div>
+                    <label className="text-xs uppercase text-muted font-bold block mb-1 tracking-widest">Notificações Push</label>
+                    <p className="text-[10px] text-gray-500 uppercase font-black tracking-tight leading-tight">
+                       Alertas de treinos dos grupos
+                    </p>
+                 </div>
+                 <Button 
+                   size="sm" 
+                   variant="secondary"
+                   className="h-9 px-4 text-[10px] uppercase font-black"
+                   onClick={async () => {
+                     if (window.self !== window.top) {
+                       alert("Abra o app em uma nova aba para ativar as notificações.");
+                       return;
+                     }
+                     try {
+                        const token = await requestNotificationPermission();
+                        if (token) {
+                          alert('Notificações configuradas! Você receberá alertas quando membros dos seus grupos pontuarem.');
+                        } else {
+                          alert('Não foi possível registrar as notificações. Verifique se você bloqueou as permissões ou se o navegador suporta Push.');
+                        }
+                     } catch (err) {
+                        console.error(err);
+                        alert('Erro ao configurar notificações.');
+                     }
+                   }}
+                 >
+                   CONFIGURAR
+                 </Button>
+              </div>
+           </div>
+        </Card>
+
         {isInstallable && (
           <Card className="border-brand-primary/20 bg-brand-primary/5">
              <div className="flex justify-between items-center">
