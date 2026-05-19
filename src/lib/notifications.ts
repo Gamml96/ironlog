@@ -23,7 +23,7 @@ export async function registerFCMToken() {
     }
 
     // Register service worker explicitly
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+    const registration = await navigator.serviceWorker.register('/sw.js', {
       scope: '/'
     });
 
@@ -33,12 +33,10 @@ export async function registerFCMToken() {
     const messaging = getMessaging();
     console.log('Attempting to get FCM token...');
     
-    // In many environments, a VAPID key is STRICTLY required. 
-    // Since I don't have one, I will try to use the public default if available,
-    // but the best way is for the user to provide it.
-    // For now, I'll try to get it without it first, and if it fails, I'll log it.
+    const vapidKey = (import.meta as any).env.VITE_VAPID_KEY;
     const token = await getToken(messaging, {
-      serviceWorkerRegistration: registration
+      serviceWorkerRegistration: registration,
+      vapidKey: vapidKey || undefined
     });
 
     if (token && auth.currentUser) {
