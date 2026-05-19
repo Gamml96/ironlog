@@ -37,12 +37,12 @@ self.addEventListener('activate', (event) => {
 messaging.onBackgroundMessage((payload) => {
   console.log('[sw.js] Received background message ', payload);
   
-  const notificationTitle = payload.notification?.title || 'IronLog';
+  const notificationTitle = payload.notification?.title || payload.data?.title || 'IronLog';
   const notificationOptions = {
-    body: payload.notification?.body || 'Nova atividade no grupo!',
+    body: payload.notification?.body || payload.data?.body || 'Nova atividade no grupo!',
     icon: '/favicon.ico',
     badge: '/favicon.ico',
-    data: payload.data,
+    data: payload.data || {},
     tag: 'workout-notification',
     renotify: true
   };

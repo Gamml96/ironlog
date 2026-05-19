@@ -392,9 +392,16 @@ export default function App() {
         if (window.self !== window.top) {
           console.warn("Notifications might not work inside an iframe. Please open the app in a new tab to enable them.");
         }
-        requestNotificationPermission().then(token => {
-          if (token) console.log('Successfully registered for notifications');
-        });
+        
+        if ("Notification" in window && Notification.permission === "granted") {
+          registerFCMToken().then(token => {
+            if (token) console.log("Silently refreshed FCM token");
+          });
+        } else {
+          requestNotificationPermission().then(token => {
+            if (token) console.log("Successfully registered for notifications");
+          });
+        }
       }
     });
 

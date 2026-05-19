@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
 import fs from "fs";
 
 // Load firebase config for project ID
@@ -16,7 +17,7 @@ if (admin.apps.length === 0) {
   });
 }
 
-const db = admin.firestore();
+const db = getFirestore(firebaseConfig.firestoreDatabaseId);
 const fcm = admin.messaging();
 
 async function startServer() {

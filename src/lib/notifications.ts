@@ -27,6 +27,13 @@ export async function registerFCMToken() {
       scope: '/'
     });
 
+    try {
+      await registration.update();
+      console.log('Service worker checked for updates');
+    } catch (e) {
+      console.warn('Silent service worker update check caught error:', e);
+    }
+
     // Wait for the service worker to be ready
     await navigator.serviceWorker.ready;
 
