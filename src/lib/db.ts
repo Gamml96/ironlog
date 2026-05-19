@@ -39,6 +39,7 @@ export interface WorkoutSession {
 
 export interface WorkoutPlanExercise {
   exerciseId: string;
+  exerciseName?: string; // Cache the name to avoid lookup failures
   targetSets: number;
   targetReps: string; // e.g., "8-12" or "12,10,8"
   targetDuration?: number; // in seconds

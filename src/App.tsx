@@ -225,7 +225,7 @@ const startEmptyWorkoutHelper = (plan: WorkoutPlan): WorkoutSession => {
     date: Date.now(),
     exercises: plan.exercises.map(ex => ({
       exerciseId: ex.exerciseId,
-      exerciseName: '', // Will be resolved by the execution component
+      exerciseName: ex.exerciseName || '', 
       restTimer: ex.restTimer,
       targetReps: ex.targetReps,
       targetDuration: ex.targetDuration,
@@ -1314,13 +1314,14 @@ function EditPlanView({ plan, onSave, onCancel, onStartOneOff }: {
     try {
       const snap = await getDocs(getCollectionRef('exercises'));
       const custom = snap.docs.map(d => d.data() as Exercise);
-      // Sort by name
-      const sorted = custom.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      // Combine with defaults and sort by name
+      const all = [...DEFAULT_EXERCISES, ...custom];
+      const sorted = all.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
       setExercises(sorted);
     } catch (err) {
       console.error("Error loading exercises:", err);
-      // Fallback is empty if cloud fails and we strictly want cloud
-      setExercises([]);
+      // Fallback to only defaults if cloud fails
+      setExercises(DEFAULT_EXERCISES);
     }
   }
 
@@ -1329,6 +1330,7 @@ function EditPlanView({ plan, onSave, onCancel, onStartOneOff }: {
       ...prev,
       exercises: [...prev.exercises, {
         exerciseId: ex.id,
+        exerciseName: ex.name,
         targetSets: 3,
         targetReps: '10',
         restTimer: String(defaultRest)
@@ -1418,7 +1420,7 @@ function EditPlanView({ plan, onSave, onCancel, onStartOneOff }: {
              return (
                <div key={idx} className="bg-bg-card border border-white/5 rounded-2xl p-4 flex items-center justify-between">
                   <div className="flex-1 overflow-hidden">
-                     <p className="font-bold text-sm truncate">{baseInfo?.name || 'Exercício'}</p>
+                     <p className="font-bold text-sm truncate">{baseInfo?.name || ex.exerciseName || 'Exercício'}</p>
                      <div className="flex flex-wrap gap-2 mt-2">
                         <div className="flex items-center gap-1">
                           <input 
@@ -2311,7 +2313,7 @@ function ActiveWorkoutOverlay({
             <div key={exIdx} className="bg-bg-card rounded-[24px] p-6 border-l-4 border-l-brand-primary shadow-xl relative group/ex">
                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <h3 className="text-2xl italic font-black leading-tight">{detail?.name || 'Exercício'}</h3>
+                    <h3 className="text-2xl italic font-black leading-tight">{detail?.name || ex.exerciseName || 'Exercício'}</h3>
                     <button 
                       onClick={() => removeExerciseFromSession(exIdx)}
                       className="text-red-500/30 hover:text-red-500 p-1 transition-colors"
