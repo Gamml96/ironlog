@@ -37,7 +37,8 @@ import {
   Share2,
   Camera,
   Image as ImageIcon,
-  Send
+  Send,
+  Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, startOfWeek, endOfWeek, isToday, isYesterday, formatDistanceToNow } from 'date-fns';
@@ -283,6 +284,7 @@ export default function App() {
   const [weightIncrement, setWeightIncrement] = useState(2.5);
   const [userGroups, setUserGroups] = useState<Group[]>([]);
   const [recentlyFinishedWorkout, setRecentlyFinishedWorkout] = useState<WorkoutSession | null>(null);
+  const [autoPublishGroups, setAutoPublishGroups] = useState<Record<string, boolean>>({});
 
   // --- PWA Install Logic ---
   useEffect(() => {
@@ -422,12 +424,20 @@ export default function App() {
 
   // Global settings listener
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setAutoPublishGroups({});
+      return;
+    }
     const unsub = onSnapshot(getDocRef('settings', 'user-settings'), (doc) => {
       if (doc.exists()) {
         const data = doc.data();
         if (data.defaultWeightIncrement !== undefined) {
           setWeightIncrement(data.defaultWeightIncrement);
+        }
+        if (data.autoPublishGroups !== undefined) {
+          setAutoPublishGroups(data.autoPublishGroups);
+        } else {
+          setAutoPublishGroups({});
         }
       }
     });
@@ -560,7 +570,7 @@ export default function App() {
       {recentlyFinishedWorkout && (
         <ShareWorkoutOverlay 
           workout={recentlyFinishedWorkout}
-          groups={userGroups}
+          groups={userGroups.filter(g => !autoPublishGroups[g.id])}
           user={user!}
           onClose={() => setRecentlyFinishedWorkout(null)}
         />
@@ -591,9 +601,48 @@ export default function App() {
 
              if (user) await updatePersonalRecords(user.uid, w);
              
-             // Trigger share modal if user is in any groups
+             // Auto-publish to groups that have it enabled
+             if (user && userGroups.length > 0) {
+               const autoShareGroups = userGroups.filter(g => !!autoPublishGroups[g.id]);
+               if (autoShareGroups.length > 0) {
+                 try {
+                   await Promise.all(autoShareGroups.map(async (group) => {
+                     const postRef = doc(collection(db, 'groups', group.id, 'feed'));
+                     await setDoc(postRef, {
+                       id: postRef.id,
+                       userId: user.uid,
+                       userName: user.displayName || 'Atleta',
+                       userPhoto: user.photoURL,
+                       type: 'workout',
+                       content: 'Treino finalizado com sucesso! 💪🚀',
+                       imageUrl: '',
+                       workoutData: w,
+                       likes: [],
+                       comments: [],
+                       createdAt: Date.now()
+                     });
+
+                     // Trigger push notification
+                     notifyGroup(
+                       group.id, 
+                       user.uid, 
+                       user.displayName || 'Atleta', 
+                       w.workoutPlanName, 
+                       w.totalVolume
+                     ).catch(err => console.error("Auto notification error:", err));
+                   }));
+                 } catch (err) {
+                   console.error("Failed to auto-publish to some groups:", err);
+                 }
+               }
+             }
+
+             // Trigger share modal only for remaining groups without auto-publish
              if (userGroups.length > 0) {
-               setRecentlyFinishedWorkout(w);
+               const nonAutoGroups = userGroups.filter(g => !autoPublishGroups[g.id]);
+               if (nonAutoGroups.length > 0) {
+                 setRecentlyFinishedWorkout(w);
+               }
              }
 
              localStorage.removeItem('ironlog_active_session');
@@ -3267,6 +3316,37 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
   const [showConfig, setShowConfig] = useState(false);
   const [sDate, setSDate] = useState(group.startDate ? new Date(group.startDate).toISOString().split('T')[0] : '');
   const [eDate, setEDate] = useState(group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '');
+  const [autoPublish, setAutoPublish] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const unsub = onSnapshot(getDocRef('settings', 'user-settings'), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        if (data.autoPublishGroups && data.autoPublishGroups[group.id] !== undefined) {
+          setAutoPublish(!!data.autoPublishGroups[group.id]);
+        } else {
+          setAutoPublish(false);
+        }
+      }
+    });
+    return () => unsub();
+  }, [currentUser, group.id]);
+
+  const toggleAutoPublish = async () => {
+    const nextVal = !autoPublish;
+    setAutoPublish(nextVal);
+    try {
+      await saveToCloud('settings', {
+        id: 'user-settings',
+        autoPublishGroups: {
+          [group.id]: nextVal
+        }
+      });
+    } catch (e) {
+      console.error("Erro ao salvar configuração de publicação automática:", e);
+    }
+  };
 
   // Prevenir crash se as datas estiverem faltando (grupos antigos)
   useEffect(() => {
@@ -3438,6 +3518,30 @@ function GroupDetailsView({ group, onBack, currentUser }: { group: Group, onBack
            )}
         </div>
       </header>
+
+      {/* Auto-Publish Toggle Card */}
+      <Card className="bg-[#121214] border-white/5 overflow-hidden shadow-lg border">
+        <div className="flex items-center justify-between p-4 gap-4">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all duration-300 ${autoPublish ? 'bg-brand-primary/20 text-brand-primary' : 'bg-white/5 text-muted'}`}>
+              <Zap size={20} className={autoPublish ? "animate-pulse" : ""} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-xs font-black italic uppercase leading-none tracking-wider text-white">Publicação Automática</h3>
+              <p className="text-[10px] text-muted font-medium mt-1 leading-normal">
+                Ao terminar seu treino, ele será imediatamente compartilhado no feed deste grupo de forma automática.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={toggleAutoPublish}
+            type="button"
+            className={`w-12 h-6 rounded-full p-1 transition-all duration-300 shrink-0 select-none ${autoPublish ? 'bg-brand-primary' : 'bg-white/10'}`}
+          >
+             <div className={`w-4 h-4 bg-white rounded-full transition-all duration-300 ${autoPublish ? 'translate-x-6' : 'translate-x-0'}`} />
+          </button>
+        </div>
+      </Card>
 
       {showConfig && (
         <Card className="bg-brand-secondary/50 border-brand-primary/20 animate-in fade-in slide-in-from-top-4">
