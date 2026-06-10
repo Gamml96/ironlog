@@ -47,7 +47,7 @@ import imageCompression from 'browser-image-compression';
 import { 
   LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
-import { onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
+import type { User as FirebaseUser } from 'firebase/auth';
 import confetti from 'canvas-confetti';
 
 import { 
@@ -64,12 +64,15 @@ import {
 } from './lib/db';
 import { 
   auth, 
+  onAuthStateChanged,
+  signOut,
   loginWithGoogle, 
   db, 
   updateUserStats,
   deletePersonalRecord,
   getCollectionRef,
   getDocRef,
+  getDoc,
   saveToCloud,
   deleteFromCloud,
   writeBatch,
@@ -1927,6 +1930,7 @@ function ActiveWorkoutOverlay({
   const [currentSession, setCurrentSession] = useState<WorkoutSession>(JSON.parse(JSON.stringify(session)));
   const [previousData, setPreviousData] = useState<Record<string, ExerciseLog | null>>({});
   const [exerciseDetails, setExerciseDetails] = useState<Record<string, Exercise>>({});
+  const [activePlan, setActivePlan] = useState<WorkoutPlan | null>(null);
   const [startTime] = useState(isEditing ? (session.date || Date.now()) : (Date.now() - (session.duration || 0) * 1000));
   const [elapsed, setElapsed] = useState(session.duration || 0);
   const [restTime, setRestTime] = useState(0);
@@ -2011,6 +2015,26 @@ function ActiveWorkoutOverlay({
     }
     loadData();
   }, [currentSession.id, currentSession.exercises.length]);
+
+  // Load active plan details
+  useEffect(() => {
+    if (!currentSession.workoutPlanId) {
+      setActivePlan(null);
+      return;
+    }
+    const loadPlan = async () => {
+      try {
+        const docRef = getDocRef('plans', currentSession.workoutPlanId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          setActivePlan(snap.data() as WorkoutPlan);
+        }
+      } catch (e) {
+        console.warn("Could not load workout plan for default values:", e);
+      }
+    };
+    loadPlan();
+  }, [currentSession.workoutPlanId]);
 
   // Persist session progress to localStorage
   useEffect(() => {
@@ -2386,47 +2410,46 @@ function ActiveWorkoutOverlay({
                  <span>{detail?.muscleGroup || 'Muscle'}</span>
                </div>
 
-               {/* Last session summary */}
-               {previousData[ex.exerciseId] ? (
-                 <div className="bg-brand-primary/5 border border-dashed border-brand-primary/30 p-4 rounded-xl text-[10px] text-gray-400 flex flex-col gap-2 mb-8">
-                    <div className="flex flex-col gap-1">
-                       <span className="uppercase font-black text-brand-primary tracking-widest">Última sessão:</span>
-                       <span className="text-white font-medium text-xs">
-                          {previousData[ex.exerciseId]?.sets
-                            .filter(s => (s.weight || 0) > 0 || (isTimeEx ? (s.duration || 0) > 0 : (s.reps || 0) > 0))
-                            .map((s, idx) => {
-                              if (isTimeEx) {
-                                const d = (s.duration || 0) > 0 ? Math.floor(s.duration / 60) : (ex.targetDuration ? Math.floor(ex.targetDuration / 60) : '--');
-                                return `${s.weight}Lvl x ${d}min`;
-                              }
-                              const r = (s.reps || 0) > 0 ? s.reps : (() => {
-                                if (ex.isVariationPerSet && ex.targetReps) {
-                                  const parts = ex.targetReps.split(',').map(p => p.trim());
-                                  return parts[idx] || parts[parts.length - 1];
-                                }
-                                return ex.targetReps || '--';
-                              })();
-                              return `${s.weight}kg x ${r}`;
-                            }).join(' | ') || 'Sem séries recentes'}
-                       </span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                       <Badge variant="success">
-                         Sugestão: {(() => {
-                           const lastSets = previousData[ex.exerciseId]?.sets || [];
-                           const maxWeight = lastSets.reduce((max, s) => Math.max(max, Number(s.weight) || 0), 0);
-                           const suggested = (maxWeight + weightIncrement).toFixed(1).replace(/\.0$/, '');
-                           const unit = isTimeEx ? 'Lvl' : 'kg';
-                           return `${suggested}${unit}`;
-                         })()}
-                       </Badge>
-                    </div>
-                 </div>
-               ) : (
-                 <div className="bg-white/5 border border-dashed border-white/10 p-4 rounded-xl text-[10px] text-muted flex justify-center uppercase font-bold tracking-widest mb-8">
-                    Início da jornada!
-                 </div>
-               )}
+               {/* Alvo do Treino / Meta Registrada */}
+               {(() => {
+                 const planEx = activePlan?.exercises.find(e => e.exerciseId === ex.exerciseId);
+                 const tSets = planEx?.targetSets || ex.sets.length;
+                 const tReps = planEx?.targetReps || ex.targetReps || '10';
+                 const tRest = planEx?.restTimer || ex.restTimer || '60';
+                 const tDuration = planEx?.targetDuration || ex.targetDuration;
+
+                 return (
+                   <div className="bg-brand-primary/5 border border-dashed border-brand-primary/30 p-4 rounded-xl text-[10px] text-gray-400 flex flex-col gap-3 mb-8">
+                     <div className="flex flex-col gap-1.5">
+                       <span className="uppercase font-black text-brand-primary tracking-widest text-[10px]">Alvo do Treino:</span>
+                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-white font-bold text-xs">
+                         {isTimeEx ? (
+                           <span>{tSets} {tSets === 1 ? 'Série' : 'Séries'} x {tDuration ? Math.floor(tDuration / 60) : '--'}min</span>
+                         ) : (
+                           <span>{tSets} {tSets === 1 ? 'Série' : 'Séries'} x {tReps} reps</span>
+                         )}
+                         <div className="w-1 h-1 bg-white/20 rounded-full" />
+                         <span className="text-muted font-medium text-xs">Descanso: {tRest}s</span>
+                       </div>
+                     </div>
+                     
+                     {previousData[ex.exerciseId] && (
+                       <div className="flex items-center gap-2 border-t border-white/5 pt-2 mt-1">
+                         <Badge variant="success">
+                           Sugestão: {(() => {
+                             const lastSets = previousData[ex.exerciseId]?.sets || [];
+                             const maxWeight = lastSets.reduce((max, s) => Math.max(max, Number(s.weight) || 0), 0);
+                             const suggested = (maxWeight + weightIncrement).toFixed(1).replace(/\.0$/, '');
+                             const unit = isTimeEx ? 'Lvl' : 'kg';
+                             return `${suggested}${unit}`;
+                           })()}
+                         </Badge>
+                         <span className="text-muted text-[9px] font-medium uppercase leading-none tracking-wider">Baseado na última sessão</span>
+                       </div>
+                     )}
+                   </div>
+                 );
+               })()}
 
                <div className="space-y-3">
                   <div className="grid grid-cols-[40px_1fr_1fr_50px] gap-3 px-3 text-[10px] font-black uppercase text-muted tracking-widest">

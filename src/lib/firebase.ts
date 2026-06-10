@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
 import { format } from 'date-fns';
 import { 
   getFirestore, 
@@ -54,6 +54,7 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export { onAuthStateChanged, signOut };
 export const storage = getStorage(app);
 
 // Use getFirestore with the database ID
