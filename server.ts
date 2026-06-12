@@ -56,12 +56,18 @@ async function startServer() {
       // 2. Get FCM tokens for recipients
       const tokens: string[] = [];
       const tokenPromises = recipientIds.map(async (uid: string) => {
-        const tokensSnap = await db.collection("users").doc(uid).collection("fcm_tokens").get();
-        tokensSnap.forEach(doc => {
-          if (doc.data().token) {
-            tokens.push(doc.data().token);
-          }
-        });
+        try {
+          const tokensSnapRef = db.collection("users").doc(uid).collection("fcm_tokens");
+          console.log(`Fetching tokens for user ${uid} from path ${tokensSnapRef.path}`);
+          const tokensSnap = await tokensSnapRef.get();
+          tokensSnap.forEach(doc => {
+            if (doc.data().token) {
+              tokens.push(doc.data().token);
+            }
+          });
+        } catch (e) {
+          console.error(`Error fetching tokens for user ${uid}:`, e);
+        }
       });
 
       await Promise.all(tokenPromises);
@@ -108,16 +114,22 @@ async function startServer() {
         tokens: uniqueTokens,
       };
 
-      const response = await fcm.sendEachForMulticast(message);
-      console.log(`FCM send success for group ${groupId}. Success: ${response.successCount}, Failure: ${response.failureCount}`);
-      
-      res.json({ 
-        success: true, 
-        successCount: response.successCount, 
-        failureCount: response.failureCount 
-      });
+      try {
+        console.log(`Attempting to send FCM multicast to ${uniqueTokens.length} tokens.`);
+        const response = await fcm.sendEachForMulticast(message);
+        console.log(`FCM send success for group ${groupId}. Success: ${response.successCount}, Failure: ${response.failureCount}`);
+        
+        res.json({ 
+          success: true, 
+          successCount: response.successCount, 
+          failureCount: response.failureCount 
+        });
+      } catch (fcmError) {
+        console.error("Error sending FCM notification:", fcmError);
+        throw fcmError;
+      }
     } catch (error) {
-      console.error("Error sending notification:", error);
+      console.error("Critical error in /api/notify-group:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   });
