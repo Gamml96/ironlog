@@ -104,7 +104,8 @@ import { PersonalRecord } from './lib/db';
 import { 
   requestNotificationPermission, 
   registerFCMToken, 
-  notifyGroup 
+  notifyGroup,
+  subscribeToForegroundMessages
 } from './lib/notifications';
 
 // --- Utilities ---
@@ -288,6 +289,71 @@ export default function App() {
   const [userGroups, setUserGroups] = useState<Group[]>([]);
   const [recentlyFinishedWorkout, setRecentlyFinishedWorkout] = useState<WorkoutSession | null>(null);
   const [autoPublishGroups, setAutoPublishGroups] = useState<Record<string, boolean>>({});
+  const [toastNotif, setToastNotif] = useState<{ title: string; body: string; id: string } | null>(null);
+
+  // --- Foreground Notification Listener ---
+  useEffect(() => {
+    if (!user) return;
+
+    console.log("Subscribing to foreground FCM messages...");
+    const unsubscribe = subscribeToForegroundMessages((payload) => {
+      console.log("FCM foreground callback triggered, payload:", payload);
+      
+      const title = payload.notification?.title || payload.data?.title || 'IronLog';
+      const body = payload.notification?.body || payload.data?.body || 'Nova atividade!';
+      
+      // 1. Set the visual in-app toast notification
+      setToastNotif({
+        title,
+        body,
+        id: Date.now().toString()
+      });
+
+      // 2. Trigger native OS push-like notification via the Service Worker if permitted
+      if ("Notification" in window && Notification.permission === "granted") {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(title, {
+              body,
+              icon: '/favicon.ico',
+              badge: '/favicon.ico',
+              data: payload.data || {},
+              tag: 'workout-notification',
+              renotify: true
+            } as any);
+          }).catch((err) => {
+            console.warn("Failed to trigger service worker notification:", err);
+            try {
+              new Notification(title, { body, icon: '/favicon.ico' });
+            } catch (fallbackErr) {
+              console.error("Fallback notification construct failed:", fallbackErr);
+            }
+          });
+        } else {
+          try {
+            new Notification(title, { body, icon: '/favicon.ico' });
+          } catch (e) {
+            console.error("Notification constructor failed:", e);
+          }
+        }
+      }
+    });
+
+    return () => {
+      console.log("Unsubscribing from foreground FCM messages...");
+      unsubscribe();
+    };
+  }, [user]);
+
+  // Clean up the in-app toast automatically after 6 seconds
+  useEffect(() => {
+    if (toastNotif) {
+      const timer = setTimeout(() => {
+        setToastNotif(null);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotif]);
 
   // --- PWA Install Logic ---
   useEffect(() => {
@@ -482,6 +548,37 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen max-w-md mx-auto relative overflow-hidden bg-bg-base">
+      {/* Foreground Toast Notification */}
+      <AnimatePresence>
+        {toastNotif && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 350, damping: 25 }}
+            className="absolute top-4 left-4 right-4 z-50 bg-stone-900 border-2 border-brand-primary/40 rounded-2xl p-4 shadow-[0_10px_30px_rgba(255,94,26,0.15)] backdrop-blur-md flex items-start gap-3"
+          >
+            <div className="h-10 w-10 rounded-xl bg-brand-primary/20 flex items-center justify-center flex-shrink-0 text-brand-primary animate-bounce">
+              <Zap className="w-5 h-5 text-brand-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h4 className="text-sm font-display font-black uppercase tracking-wider text-brand-primary">
+                {toastNotif.title}
+              </h4>
+              <p className="text-xs text-stone-300 font-sans mt-0.5 leading-relaxed break-words">
+                {toastNotif.body}
+              </p>
+            </div>
+            <button 
+              onClick={() => setToastNotif(null)}
+              className="text-stone-400 hover:text-white p-1 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <main className="flex-1 overflow-y-auto pb-32 pt-safe px-4">
         <AnimatePresence mode="wait">
           {activeTab === 'hoje' && (

@@ -87,6 +87,19 @@ export async function notifyGroup(groupId: string, userId: string, userName: str
   }
 }
 
+export function subscribeToForegroundMessages(callback: (payload: any) => void) {
+  try {
+    const messaging = getMessaging();
+    return onMessage(messaging, (payload) => {
+      console.log("Foreground message received:", payload);
+      callback(payload);
+    });
+  } catch (error) {
+    console.error("Error subscribing to foreground messages:", error);
+    return () => {};
+  }
+}
+
 export function onMessageListener() {
   const messaging = getMessaging();
   return new Promise((resolve) => {
