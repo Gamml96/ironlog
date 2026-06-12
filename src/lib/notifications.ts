@@ -23,9 +23,7 @@ export async function registerFCMToken() {
     }
 
     // Register service worker explicitly
-    const registration = await navigator.serviceWorker.register('/sw.js', {
-      scope: '/'
-    });
+    const registration = await navigator.serviceWorker.register('/sw.js');
 
     try {
       await registration.update();
@@ -42,8 +40,8 @@ export async function registerFCMToken() {
     
     const vapidKey = (import.meta as any).env.VITE_VAPID_KEY;
     const token = await getToken(messaging, {
+      vapidKey: vapidKey,
       serviceWorkerRegistration: registration,
-      vapidKey: vapidKey || undefined
     });
 
     if (token && auth.currentUser) {
