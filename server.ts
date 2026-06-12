@@ -78,6 +78,10 @@ async function startServer() {
 
       // 3. Send notifications
       const uniqueTokens = Array.from(new Set(tokens));
+      const host = req.get('host');
+      const protocol = host?.includes('localhost') ? 'http' : 'https';
+      const absoluteLink = `${protocol}://${host}/groups`;
+
       const message = {
         notification: {
           title: `Treino Registrado no ${groupData?.name || 'Grupo'}!`,
@@ -101,13 +105,13 @@ async function startServer() {
             ]
           },
           fcmOptions: {
-            link: "/groups"
+            link: absoluteLink
           }
         },
         data: {
           groupId,
           type: "workout_alert",
-          link: "/groups"
+          link: absoluteLink
         },
         tokens: uniqueTokens,
       };

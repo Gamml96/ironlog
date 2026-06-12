@@ -33,20 +33,6 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-self.addEventListener('push', (event) => {
-  console.log('[sw.js] Push event recebido:', event.data?.text());
-  
-  // Se não tiver payload (como o do DevTools), mostra uma notificação padrão
-  if (!event.data || !event.data.text()) {
-    event.waitUntil(
-      self.registration.showNotification('IronLog', {
-        body: 'Teste de notificação',
-        icon: '/favicon.ico',
-      })
-    );
-  }
-});
-
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
   console.log('[sw.js] Received background message ', payload);
