@@ -17,7 +17,7 @@ if (admin.apps.length === 0) {
   });
 }
 
-const db = getFirestore(firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(admin.app(), firebaseConfig.firestoreDatabaseId);
 const fcm = admin.messaging();
 
 async function startServer() {
