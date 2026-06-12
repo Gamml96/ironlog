@@ -11,10 +11,7 @@ const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'fire
 // In this environment, we might not have a service account file, but we can try initializing with just project ID
 // or rely on ADC if available.
 if (admin.apps.length === 0) {
-  admin.initializeApp({
-    credential: admin.credential.applicationDefault(),
-    projectId: firebaseConfig.projectId,
-  });
+  admin.initializeApp();
 }
 
 const db = admin.firestore();
