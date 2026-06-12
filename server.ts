@@ -12,6 +12,7 @@ const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'fire
 // or rely on ADC if available.
 if (admin.apps.length === 0) {
   admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
     projectId: firebaseConfig.projectId,
   });
 }
