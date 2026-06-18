@@ -78,8 +78,8 @@ async function startServer() {
 
       // 3. Send notifications
       const uniqueTokens = Array.from(new Set(tokens));
-      const host = req.get('host');
-      const protocol = host?.includes('localhost') ? 'http' : 'https';
+      const host = req.headers['x-forwarded-host'] || req.get('host');
+      const protocol = req.headers['x-forwarded-proto'] || (host?.includes('localhost') ? 'http' : 'https');
       const absoluteLink = `${protocol}://${host}/groups`;
 
       const message = {
