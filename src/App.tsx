@@ -2811,6 +2811,8 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall, fcmStatus, s
   const [profile, setProfile] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [customVapidKey, setCustomVapidKey] = useState(typeof window !== 'undefined' ? (localStorage.getItem('custom_vapid_key') || '') : '');
+  const [showAdvancedFCM, setShowAdvancedFCM] = useState(false);
 
   useEffect(() => {
     const unsubSettings = onSnapshot(getDocRef('settings', 'user-settings'), (doc) => {
@@ -3094,6 +3096,42 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall, fcmStatus, s
                   🛡️ CHAVE MULTIPLATAFORMA ATIVA: Usando a chave pública VAPID integrada para garantir o registro seguro das notificações push.
                 </div>
               )}
+
+              <div className="pt-2 border-t border-white/5">
+                 <button
+                   type="button"
+                   onClick={() => setShowAdvancedFCM(!showAdvancedFCM)}
+                   className="text-[9px] text-gray-400 hover:text-white uppercase font-black tracking-widest flex items-center gap-1 transition-colors"
+                 >
+                   {showAdvancedFCM ? '▼ OCULTAR CONFIGURAÇÃO AVANÇADA' : '▶ EXIBIR CONFIGURAÇÃO AVANÇADA (VAPID)'}
+                 </button>
+                 
+                 {showAdvancedFCM && (
+                   <div className="mt-2 space-y-2 bg-black/40 p-3 rounded-lg border border-white/5">
+                     <label className="text-[9px] text-gray-400 uppercase font-bold block">
+                       Chave Pública VAPID customizada:
+                     </label>
+                     <input
+                       type="text"
+                       placeholder="Insira a sua chave VAPID obtida no console Firebase"
+                       value={customVapidKey}
+                       onChange={(e) => {
+                         const val = e.target.value.trim();
+                         setCustomVapidKey(val);
+                         if (val) {
+                           localStorage.setItem('custom_vapid_key', val);
+                         } else {
+                           localStorage.removeItem('custom_vapid_key');
+                         }
+                       }}
+                       className="w-full text-xs bg-black/80 text-white rounded p-1.5 border border-white/10 uppercase tracking-wide placeholder-gray-600 focus:outline-none focus:border-brand-primary font-mono text-[9px]"
+                     />
+                     <p className="text-[8px] text-gray-500 uppercase leading-normal font-medium normal-case">
+                       Se você vir erros como "invalid-vapid-key", configure uma Web Push Certificate no painel Firebase Cloud Messaging e insira seu valor acima.
+                     </p>
+                   </div>
+                 )}
+              </div>
            </div>
         </Card>
 

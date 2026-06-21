@@ -1,5 +1,5 @@
 import { getMessaging, getToken, onMessage } from "firebase/messaging";
-import { db, auth } from "./firebase";
+import { db, auth, app } from "./firebase";
 import { doc, setDoc, collection } from "firebase/firestore";
 
 export async function requestNotificationPermission() {
@@ -35,10 +35,11 @@ export async function registerFCMToken() {
     // Wait for the service worker to be ready
     await navigator.serviceWorker.ready;
 
-    const messaging = getMessaging();
+    const messaging = getMessaging(app);
     console.log('Attempting to get FCM token...');
     
-    const vapidKey = (import.meta as any).env.VITE_VAPID_KEY || 'BPgNlV0Sq2JP_-hT0G6Y4lCT1J9ZOpfiWYyjhhsfmjFN9pjz2qAbkMPiLsu0xZAgOfoUGzOIPKWVZvt3CIGQ8HQ';
+    const customVapid = typeof window !== 'undefined' ? localStorage.getItem('custom_vapid_key') : null;
+    const vapidKey = customVapid || (import.meta as any).env.VITE_VAPID_KEY || 'BPgNlV0Sq2JP_-hT0G6Y4lCT1J9ZOpfiWYyjhhsfmjFN9pjz2qAbkMPiLsu0xZAgOfoUGzOIPKWVZvt3CIGQ8HQ';
     const tokenOptions: any = {
       serviceWorkerRegistration: registration,
     };
@@ -58,14 +59,15 @@ export async function registerFCMToken() {
       return token;
     } else {
       console.warn('No FCM token received or user not logged in.');
+      throw new Error('Usuário não autenticado ou token vazio.');
     }
   } catch (error) {
     console.error("Error registering FCM token:", error);
     if (error instanceof Error && error.message.includes('permission')) {
       console.error("Push permission denied by user or browser.");
     }
+    throw error;
   }
-  return null;
 }
 
 export async function notifyGroup(groupId: string, userId: string, userName: string, workoutName: string, volume: number) {
@@ -92,7 +94,7 @@ export async function notifyGroup(groupId: string, userId: string, userName: str
 
 export function subscribeToForegroundMessages(callback: (payload: any) => void) {
   try {
-    const messaging = getMessaging();
+    const messaging = getMessaging(app);
     return onMessage(messaging, (payload) => {
       console.log("Foreground message received:", payload);
       callback(payload);
@@ -104,7 +106,7 @@ export function subscribeToForegroundMessages(callback: (payload: any) => void) 
 }
 
 export function onMessageListener() {
-  const messaging = getMessaging();
+  const messaging = getMessaging(app);
   return new Promise((resolve) => {
     onMessage(messaging, (payload) => {
       resolve(payload);
