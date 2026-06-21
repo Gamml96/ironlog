@@ -466,7 +466,8 @@ export default function App() {
         }
         
         if ("Notification" in window) {
-          if (Notification.permission === "granted") {
+          const currentPermission = Notification.permission;
+          if (currentPermission === "granted") {
             setFcmStatus({ status: 'loading' });
             registerFCMToken().then(token => {
               if (token) {
@@ -478,19 +479,10 @@ export default function App() {
             }).catch(err => {
               setFcmStatus({ status: 'error', error: err?.message || 'Erro ao registrar token' });
             });
+          } else if (currentPermission === "denied") {
+            setFcmStatus({ status: 'error', error: 'Permissão para notificações negada pelo usuário.' });
           } else {
             setFcmStatus({ status: 'unregistered' });
-            // Safe, interactive request
-            requestNotificationPermission().then(token => {
-              if (token) {
-                console.log("Successfully registered for notifications");
-                setFcmStatus({ status: 'registered', token });
-              } else {
-                setFcmStatus({ status: 'error', error: 'Não foi possível obter permissão ou token.' });
-              }
-            }).catch(err => {
-              setFcmStatus({ status: 'error', error: err?.message || 'Erro ao requerer permissão' });
-            });
           }
         } else {
           setFcmStatus({ status: 'error', error: 'Push não é suportado por este navegador.' });
@@ -3052,7 +3044,7 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall, fcmStatus, s
                  </div>
                  <Button 
                    size="sm" 
-                   variant={fcmStatus.status === 'registered' ? 'success' : 'secondary'}
+                   variant={fcmStatus.status === 'registered' ? 'primary' : 'secondary'}
                    className="h-9 px-4 text-[10px] uppercase font-black"
                    onClick={async () => {
                      if (window.self !== window.top) {
@@ -3098,8 +3090,8 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall, fcmStatus, s
                 </div>
               )}
               {!(import.meta as any).env.VITE_VAPID_KEY && (
-                <div className="mt-4 text-[9px] text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded p-2 uppercase font-black tracking-wider leading-relaxed">
-                  ⚠️ CHAVE PÚBLICA VAPID AUSENTE: Certifique-se de definir a variável de ambiente VITE_VAPID_KEY para habilitar notificações seguras em navegadores Chrome e Safari modernos.
+                <div className="mt-4 text-[9px] text-brand-primary bg-brand-primary/10 border border-brand-primary/20 rounded p-2 uppercase font-black tracking-wider leading-relaxed">
+                  🛡️ CHAVE MULTIPLATAFORMA ATIVA: Usando a chave pública VAPID integrada para garantir o registro seguro das notificações push.
                 </div>
               )}
            </div>

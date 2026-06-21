@@ -38,7 +38,7 @@ export async function registerFCMToken() {
     const messaging = getMessaging();
     console.log('Attempting to get FCM token...');
     
-    const vapidKey = (import.meta as any).env.VITE_VAPID_KEY;
+    const vapidKey = (import.meta as any).env.VITE_VAPID_KEY || 'BPgNlV0Sq2JP_-hT0G6Y4lCT1J9ZOpfiWYyjhhsfmjFN9pjz2qAbkMPiLsu0xZAgOfoUGzOIPKWVZvt3CIGQ8HQ';
     const tokenOptions: any = {
       serviceWorkerRegistration: registration,
     };
