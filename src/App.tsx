@@ -290,6 +290,7 @@ export default function App() {
   const [recentlyFinishedWorkout, setRecentlyFinishedWorkout] = useState<WorkoutSession | null>(null);
   const [autoPublishGroups, setAutoPublishGroups] = useState<Record<string, boolean>>({});
   const [toastNotif, setToastNotif] = useState<{ title: string; body: string; id: string } | null>(null);
+  const [fcmStatus, setFcmStatus] = useState<{ status: 'idle' | 'registered' | 'unregistered' | 'loading' | 'error'; token?: string; error?: string }>({ status: 'idle' });
 
   // --- Foreground Notification Listener ---
   useEffect(() => {
@@ -464,14 +465,35 @@ export default function App() {
           console.warn("Notifications might not work inside an iframe. Please open the app in a new tab to enable them.");
         }
         
-        if ("Notification" in window && Notification.permission === "granted") {
-          registerFCMToken().then(token => {
-            if (token) console.log("Silently refreshed FCM token");
-          });
+        if ("Notification" in window) {
+          if (Notification.permission === "granted") {
+            setFcmStatus({ status: 'loading' });
+            registerFCMToken().then(token => {
+              if (token) {
+                console.log("Silently refreshed FCM token");
+                setFcmStatus({ status: 'registered', token });
+              } else {
+                setFcmStatus({ status: 'error', error: 'Falha ao recuperar token (verifique a chave VAPID).' });
+              }
+            }).catch(err => {
+              setFcmStatus({ status: 'error', error: err?.message || 'Erro ao registrar token' });
+            });
+          } else {
+            setFcmStatus({ status: 'unregistered' });
+            // Safe, interactive request
+            requestNotificationPermission().then(token => {
+              if (token) {
+                console.log("Successfully registered for notifications");
+                setFcmStatus({ status: 'registered', token });
+              } else {
+                setFcmStatus({ status: 'error', error: 'Não foi possível obter permissão ou token.' });
+              }
+            }).catch(err => {
+              setFcmStatus({ status: 'error', error: err?.message || 'Erro ao requerer permissão' });
+            });
+          }
         } else {
-          requestNotificationPermission().then(token => {
-            if (token) console.log("Successfully registered for notifications");
-          });
+          setFcmStatus({ status: 'error', error: 'Push não é suportado por este navegador.' });
         }
       }
     });
@@ -623,6 +645,8 @@ export default function App() {
               onLogout={() => signOut(auth)} 
               isInstallable={isInstallable}
               onInstall={handleInstallClick}
+              fcmStatus={fcmStatus}
+              setFcmStatus={setFcmStatus}
             />
           )}
         </AnimatePresence>
@@ -2777,11 +2801,13 @@ function ActiveWorkoutOverlay({
 
 // --- View: Settings ---
 
-function SettingsView({ onBack, onLogout, isInstallable, onInstall }: { 
+function SettingsView({ onBack, onLogout, isInstallable, onInstall, fcmStatus, setFcmStatus }: { 
   onBack: () => void, 
   onLogout: () => void,
   isInstallable: boolean,
-  onInstall: () => void
+  onInstall: () => void,
+  fcmStatus: { status: 'idle' | 'registered' | 'unregistered' | 'loading' | 'error'; token?: string; error?: string },
+  setFcmStatus: React.Dispatch<React.SetStateAction<{ status: 'idle' | 'registered' | 'unregistered' | 'loading' | 'error'; token?: string; error?: string }>>
 }) {
   const [defaultRest, setDefaultRest] = useState(60);
   const [restInput, setRestInput] = useState('60');
@@ -3026,29 +3052,56 @@ function SettingsView({ onBack, onLogout, isInstallable, onInstall }: {
                  </div>
                  <Button 
                    size="sm" 
-                   variant="secondary"
+                   variant={fcmStatus.status === 'registered' ? 'success' : 'secondary'}
                    className="h-9 px-4 text-[10px] uppercase font-black"
                    onClick={async () => {
                      if (window.self !== window.top) {
                        alert("Abra o app em uma nova aba para ativar as notificações.");
                        return;
                      }
+                     setFcmStatus({ status: 'loading' });
                      try {
                         const token = await requestNotificationPermission();
                         if (token) {
+                          setFcmStatus({ status: 'registered', token });
                           alert('Notificações configuradas! Você receberá alertas quando membros dos seus grupos pontuarem.');
                         } else {
+                          setFcmStatus({ status: 'error', error: 'Permissão concedida, mas falha ao obter token (verifique a rede ou se a chave VAPID está correta).' });
                           alert('Não foi possível registrar as notificações. Verifique se você bloqueou as permissões ou se o navegador suporta Push.');
                         }
                      } catch (err) {
                         console.error(err);
-                        alert('Erro ao configurar notificações.');
+                        const msg = err instanceof Error ? err.message : String(err);
+                        setFcmStatus({ status: 'error', error: msg });
+                        alert('Erro ao configurar notificações: ' + msg);
                      }
                    }}
                  >
-                   CONFIGURAR
+                   {fcmStatus.status === 'registered' ? 'ATIVADO' : fcmStatus.status === 'loading' ? 'REGISTRANDO...' : 'CONFIGURAR'}
                  </Button>
               </div>
+
+              {fcmStatus.status === 'registered' && (
+                <div className="mt-4 text-[9px] text-green-400 bg-green-500/10 border border-green-500/20 rounded p-2 uppercase font-black tracking-wider leading-relaxed">
+                  ✓ Token registrado com sucesso no servidor:
+                  <div className="font-mono text-[8.5px] break-all select-all text-white/50 mt-1 p-1 bg-black/30 rounded border border-white/5">{fcmStatus.token}</div>
+                </div>
+              )}
+              {fcmStatus.status === 'error' && (
+                <div className="mt-4 text-[9px] text-red-400 bg-red-500/10 border border-red-500/20 rounded p-2 uppercase font-black tracking-wider leading-relaxed">
+                  ❌ Não Registrado: {fcmStatus.error}
+                </div>
+              )}
+              {fcmStatus.status === 'loading' && (
+                <div className="mt-4 text-[9px] text-gray-400 bg-white/5 border border-white/10 rounded p-2 uppercase font-black tracking-wider leading-relaxed animate-pulse">
+                  Conectando-se ao registrador de push da Google...
+                </div>
+              )}
+              {!(import.meta as any).env.VITE_VAPID_KEY && (
+                <div className="mt-4 text-[9px] text-amber-500 bg-amber-500/10 border border-amber-500/20 rounded p-2 uppercase font-black tracking-wider leading-relaxed">
+                  ⚠️ CHAVE PÚBLICA VAPID AUSENTE: Certifique-se de definir a variável de ambiente VITE_VAPID_KEY para habilitar notificações seguras em navegadores Chrome e Safari modernos.
+                </div>
+              )}
            </div>
         </Card>
 

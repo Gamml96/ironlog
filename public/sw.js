@@ -51,10 +51,18 @@ self.addEventListener('push', (event) => {
 
   console.log('[sw.js] Decoded push payload:', payload);
 
+  // PREVENT DUPLICATES: If this is a standard FCM push payload containing a notification block,
+  // the Firebase Messaging compat SDK is initialized above and will handle displaying it
+  // automatically. We must NOT call registration.showNotification here to prevent duplicate popups.
+  if (payload.notification) {
+    console.log('[sw.js] Notification block detected, letting Firebase Messaging SDK handle display.');
+    return;
+  }
+
   // Extract fields from standard FCM or fallback data payload
-  const title = payload.notification?.title || payload.data?.title || 'IronLog';
-  const body = payload.notification?.body || payload.data?.body || 'Nova atividade no grupo!';
-  const link = payload.data?.link || payload.notification?.click_action || '/groups';
+  const title = payload.data?.title || 'IronLog';
+  const body = payload.data?.body || 'Nova atividade no grupo!';
+  const link = payload.data?.link || '/groups';
 
   const notificationOptions = {
     body,

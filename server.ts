@@ -52,15 +52,16 @@ async function startServer() {
       }
 
       // 2. Get FCM tokens for recipients
-      const tokens: string[] = [];
+      const recipientTokens: { uid: string; token: string }[] = [];
       const tokenPromises = recipientIds.map(async (uid: string) => {
         try {
           const tokensSnapRef = db.collection("users").doc(uid).collection("fcm_tokens");
           console.log(`Fetching tokens for user ${uid} from path ${tokensSnapRef.path}`);
           const tokensSnap = await tokensSnapRef.get();
           tokensSnap.forEach(doc => {
-            if (doc.data().token) {
-              tokens.push(doc.data().token);
+            const token = doc.data().token;
+            if (token) {
+              recipientTokens.push({ uid, token });
             }
           });
         } catch (e) {
@@ -69,15 +70,27 @@ async function startServer() {
       });
 
       await Promise.all(tokenPromises);
-      console.log(`Found ${tokens.length} FCM tokens for recipients of group ${groupId}.`);
 
-      if (tokens.length === 0) {
+      // Deduplicate unique tokens while keeping track of uid
+      const uniqueRecipientTokens: { uid: string; token: string }[] = [];
+      const seenTokens = new Set<string>();
+      for (const rt of recipientTokens) {
+        if (!seenTokens.has(rt.token)) {
+          seenTokens.add(rt.token);
+          uniqueRecipientTokens.push(rt);
+        }
+      }
+
+      console.log(`Found ${uniqueRecipientTokens.length} unique FCM tokens for recipients of group ${groupId}.`);
+
+      if (uniqueRecipientTokens.length === 0) {
         console.warn(`No FCM tokens found for recipients in group ${groupId}. Directing recipients to register for push notifications.`);
         return res.json({ success: true, message: "No tokens found" });
       }
 
+      const uniqueTokens = uniqueRecipientTokens.map(rt => rt.token);
+
       // 3. Send notifications
-      const uniqueTokens = Array.from(new Set(tokens));
       const host = req.headers['x-forwarded-host'] || req.get('host');
       const protocol = req.headers['x-forwarded-proto'] || (host?.includes('localhost') ? 'http' : 'https');
       const absoluteLink = `${protocol}://${host}/groups`;
@@ -85,7 +98,7 @@ async function startServer() {
       const message = {
         notification: {
           title: `Treino Registrado no ${groupData?.name || 'Grupo'}!`,
-          body: `${userName} acabou de detonar um treino de ${workoutName}! 🔥`,
+          body: `${userName} acabou de detonar um treino de ${workoutName || 'atividade'}! 🔥`,
         },
         webpush: {
           headers: {
@@ -93,7 +106,7 @@ async function startServer() {
           },
           notification: {
             title: `Treino Registrado no ${groupData?.name || 'Grupo'}!`,
-            body: `${userName} acabou de detonar um treino de ${workoutName}! 🔥`,
+            body: `${userName} acabou de detonar um treino de ${workoutName || 'atividade'}! 🔥`,
             icon: "/favicon.ico",
             badge: "/favicon.ico",
             requireInteraction: true,
@@ -121,6 +134,35 @@ async function startServer() {
         const response = await fcm.sendEachForMulticast(message);
         console.log(`FCM send success for group ${groupId}. Success: ${response.successCount}, Failure: ${response.failureCount}`);
         
+        // Remove bad / unregistered tokens from Firestore
+        if (response.failureCount > 0) {
+          const batch = db.batch();
+          let deleteCount = 0;
+          response.responses.forEach((resp, idx) => {
+            if (!resp.success) {
+              const errorCode = resp.error?.code;
+              const errorMessage = resp.error?.message;
+              console.warn(`Token at index ${idx} failed with error error-code="${errorCode}": ${errorMessage}`);
+              
+              if (
+                errorCode === "messaging/registration-token-not-registered" ||
+                errorCode === "messaging/invalid-argument" ||
+                errorCode === "messaging/invalid-registration-token"
+              ) {
+                const rt = uniqueRecipientTokens[idx];
+                console.log(`Cleaning up invalid token for user ${rt.uid}: ${rt.token}`);
+                const tokenDocRef = db.collection("users").doc(rt.uid).collection("fcm_tokens").doc(rt.token);
+                batch.delete(tokenDocRef);
+                deleteCount++;
+              }
+            }
+          });
+          if (deleteCount > 0) {
+            await batch.commit();
+            console.log(`Pruned ${deleteCount} expired or invalid tokens from DB.`);
+          }
+        }
+
         res.json({ 
           success: true, 
           successCount: response.successCount, 
