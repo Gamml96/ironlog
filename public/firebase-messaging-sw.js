@@ -107,11 +107,18 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
-  // Do not cache API calls or Firebase/FCM calls
+  // CRITICAL: Only intercept same-origin requests to prevent blocking/breaking 
+  // third-party API/FCM/auth fetch calls with CORS or "Failed to fetch" errors.
+  if (!request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
+  // Do not cache API calls, hot-reload/dev files, or special requests
   if (
     request.url.includes('/api/') || 
-    request.url.includes('googleapis.com') ||
-    request.url.includes('firebase')
+    request.url.includes('firebase') ||
+    request.url.includes('/@vite/') || 
+    request.url.includes('/node_modules/')
   ) {
     return;
   }
@@ -122,13 +129,17 @@ self.addEventListener('fetch', (event) => {
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             return caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, networkResponse.clone());
+              try {
+                cache.put(request, networkResponse.clone()).catch(() => {});
+              } catch (e) {}
               return networkResponse;
             });
           }
           return networkResponse;
         })
-        .catch(() => cachedResponse);
+        .catch(() => {
+          return cachedResponse || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+        });
 
       return cachedResponse || fetchPromise;
     })
